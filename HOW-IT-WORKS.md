@@ -6,12 +6,13 @@ The plugin runs three hooks across the Claude Code session lifecycle.
 
 `hooks/scripts/session-start.sh` runs on every new session and:
 
-1. Tries to launch Obsidian.app if available (purely so the optional `obsidian` CLI works). No-op on Linux.
-2. Derives the project name from `$CLAUDE_PROJECT_DIR` basename (or `$PWD`).
-3. Injects into context:
+1. **First-time setup gate.** If `$OBSIDIAN_VAULT_PATH` doesn't exist, the hook injects a consent prompt instructing Claude to ask the user once before running `setup.sh` (and offering an optional `git init`). It then exits early — none of the steps below run until the vault exists. On the next session after scaffolding, the normal flow takes over.
+2. Tries to launch Obsidian.app if available (purely so the optional `obsidian` CLI works). No-op on Linux.
+3. Derives the project name from `$CLAUDE_PROJECT_DIR` basename (or `$PWD`).
+4. Injects into context:
    - **Bootstrap instructions** — recall/remember/route guidance.
    - **Vault `README.md`** — prose orientation.
-   - **Auto-generated vault overview** — produced by `_vault.py overview --project <name>` walking each note's frontmatter. Lists Tools, General, and the current project's Decisions/Learnings/Research/References/Journal. Other projects appear as a name list to keep the payload small.
+   - **Auto-generated vault overview** — produced by the shared `_overview.sh` helper (cached at `$MEMORY_OVERVIEW_CACHE_DIR`, invalidated by vault `*.md` mtimes). Lists Tools, General, and the current project's Decisions/Learnings/Research/References/Journal. Other projects appear as a name list to keep the payload small.
    - **Project-scaffolding prompt** if `Projects/<name>/` doesn't exist — instructs Claude to ask once before creating the folder.
 
 Total injection is typically 3–8 KB depending on vault size.

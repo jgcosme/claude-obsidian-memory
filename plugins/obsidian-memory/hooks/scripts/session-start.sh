@@ -26,15 +26,37 @@ if [ -z "${OBSIDIAN_CLI:-}" ]; then
 fi
 
 # ---------------------------------------------------------------------------
-# Defensive: if vault doesn't exist, emit a helpful note and exit cleanly.
+# First-time setup: if vault doesn't exist, instruct Claude to ask the user
+# once before scaffolding. setup.sh is idempotent and only writes under
+# $OBSIDIAN_VAULT_PATH and ~/.config/claude-memory/.
 # ---------------------------------------------------------------------------
 if [ ! -d "$OBSIDIAN_VAULT_PATH" ]; then
   cat <<EOF
-=== OBSIDIAN MEMORY (not yet set up) ===
-The plugin is installed but no vault exists at: $OBSIDIAN_VAULT_PATH
-Run the setup script to scaffold a vault:
-  bash \${CLAUDE_PLUGIN_ROOT}/scripts/setup.sh
-Or set OBSIDIAN_VAULT_PATH in ~/.config/claude-memory/config.env to point at an existing vault.
+=== OBSIDIAN MEMORY (first-time setup) ===
+
+The plugin is installed but no vault exists yet at: $OBSIDIAN_VAULT_PATH
+
+Before doing anything else this session, ask the user ONCE:
+  "Set up the obsidian-memory vault at $OBSIDIAN_VAULT_PATH? This creates the
+   vault directory, scaffolds Tools/General/Projects/, and writes a config to
+   ~/.config/claude-memory/. Fully reversible. (y/n)"
+
+If YES:
+  1. bash "\${CLAUDE_PLUGIN_ROOT}/scripts/setup.sh"
+  2. Ask: "Initialize the vault as a git repo so SessionEnd can auto-commit
+     memory writes? (y/n)"
+     If yes:
+       cd "$OBSIDIAN_VAULT_PATH" && git init -b main && git add -A && git commit -m "Initial commit"
+  3. Summarize what was created, then continue with the user's original request.
+
+If NO, respect that: do not write to the vault this session. The user can
+run setup later with:
+  bash "\${CLAUDE_PLUGIN_ROOT}/scripts/setup.sh"
+or check current state with:
+  /obsidian-memory:status
+
+To use a different vault path, set OBSIDIAN_VAULT_PATH in
+~/.config/claude-memory/config.env first.
 EOF
   exit 0
 fi

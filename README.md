@@ -35,21 +35,28 @@ Tested on macOS; Linux works with the same prerequisites.
 /reload-plugins
 ```
 
-Then run the setup script:
+The first time you start a Claude session after installing, SessionStart detects the missing vault and asks Claude to confirm setup with you (one consent prompt). Answer **yes** and Claude runs `setup.sh` for you, then offers to `git init` the vault so SessionEnd can auto-commit.
+
+To run setup manually instead — or to scaffold without starting a Claude session — invoke:
 
 ```bash
 bash "$CLAUDE_PLUGIN_ROOT/scripts/setup.sh"
 ```
 
-It's idempotent. It creates `~/Documents/Obsidian Vault/` (or wherever `OBSIDIAN_VAULT_PATH` points), `~/.config/claude-memory/config.env`, and a `chmod 600` `secrets.env`.
+It's idempotent. It first verifies prerequisites (`jq`, `python3 ≥ 3.9`, `git`, optional `flock`) and exits with a clear message if any required tool is missing. It then creates `~/Documents/Obsidian Vault/` (or wherever `OBSIDIAN_VAULT_PATH` points), `~/.config/claude-memory/config.env`, and a `chmod 600` `secrets.env`.
 
-Recommended: `git init` the vault so SessionEnd can auto-commit:
+To verify the install at any time:
+
+```text
+/obsidian-memory:status
+```
+
+Reports config, vault, prereqs, plugin scripts, search smoke-test, overview cache, and the latest review/gate log lines.
+
+Optional — push the vault to a private GitHub remote so it follows you across machines:
 
 ```bash
-cd "$HOME/Documents/Obsidian Vault"
-git init -b main && git add -A && git commit -m "Initial commit"
-# Optional: push to a private remote
-gh repo create my-obsidian-vault --private --source . --remote origin --push
+gh repo create my-obsidian-vault --private --source "$HOME/Documents/Obsidian Vault" --remote origin --push
 ```
 
 ## Vault structure
@@ -127,6 +134,7 @@ Edit `~/.config/claude-memory/config.env`:
 | `MEMORY_REVIEW_LOG` | `/tmp/claude-memory-review.log` | SessionEnd review log |
 | `MEMORY_GATE_LOG` | `/tmp/claude-memory-gate.log` | retrieval gate log |
 | `MEMORY_LOG_MAX_BYTES` | `1048576` | rotate hook logs at this size |
+| `MEMORY_OVERVIEW_CACHE_DIR` | `/tmp/claude-memory-overview-cache` | shared overview cache (mtime-invalidated) |
 
 ## Secrets
 

@@ -46,6 +46,58 @@ echo "  config:      $CONFIG_FILE"
 echo ""
 
 # ---------------------------------------------------------------------------
+# 0. Prerequisite check
+# ---------------------------------------------------------------------------
+echo "Checking prerequisites:"
+MISSING=0
+
+require() {
+  local tool="$1"; local why="$2"; local install="$3"
+  if command -v "$tool" >/dev/null 2>&1; then
+    echo "  [ok]   $tool"
+  else
+    echo "  [MISS] $tool — required ($why); install: $install"
+    MISSING=$((MISSING+1))
+  fi
+}
+
+recommend() {
+  local tool="$1"; local why="$2"; local install="$3"
+  if command -v "$tool" >/dev/null 2>&1; then
+    echo "  [ok]   $tool"
+  else
+    echo "  [warn] $tool — optional ($why); install: $install"
+  fi
+}
+
+require jq        "parse hook payloads"           "brew install jq | apt install jq"
+require python3   "search CLI + audit + overview" "preinstalled on most systems"
+
+if command -v python3 >/dev/null 2>&1; then
+  PYV=$(python3 -c 'import sys; print(f"{sys.version_info.major}.{sys.version_info.minor}")' 2>/dev/null || echo "?")
+  PYOK=$(python3 -c 'import sys; print(1 if sys.version_info >= (3,9) else 0)' 2>/dev/null || echo 0)
+  if [ "$PYOK" = "1" ]; then
+    echo "  [ok]   python3 version $PYV (>= 3.9)"
+  else
+    echo "  [MISS] python3 version $PYV — need 3.9 or newer"
+    MISSING=$((MISSING+1))
+  fi
+fi
+
+recommend git   "vault history and SessionEnd auto-commit"  "preinstalled on most systems"
+case "$(uname -s)" in
+  Darwin) recommend flock "concurrent-session safety on auto-commit (macOS)" "brew install flock" ;;
+  *)      recommend flock "concurrent-session safety on auto-commit"          "your package manager" ;;
+esac
+
+if [ "$MISSING" -gt 0 ]; then
+  echo ""
+  echo "error: $MISSING required prerequisite(s) missing — install and re-run." >&2
+  exit 1
+fi
+echo ""
+
+# ---------------------------------------------------------------------------
 # 1. Config file
 # ---------------------------------------------------------------------------
 if [ ! -f "$CONFIG_FILE" ]; then
