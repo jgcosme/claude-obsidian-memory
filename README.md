@@ -191,7 +191,7 @@ git -C "$HOME/Documents/Obsidian Vault" log --all -p | grep -E "(xoxp-|sk-|gho_|
 
 ## Adding a new project
 
-The easy path: just `cd` into the project directory and start a Claude session. SessionStart will detect that `Projects/<basename>/` doesn't exist and instruct Claude to ask you once — answer **yes** and Claude runs the template-substitution commands itself. Answer **no** if this is an incidental cwd (`/tmp`, `~/Downloads`, throwaway clone) and you don't want it in the vault.
+The easy path: just `cd` into the project directory and start a Claude session. SessionStart will detect that `Projects/<basename>/` doesn't exist and instruct Claude to ask you once — answer **yes** and Claude scaffolds the folder **and prefills it** from real evidence in the project dir: README, `package.json`/`pyproject.toml`/`Cargo.toml`/`go.mod`, top-level `/docs`, `ARCHITECTURE.md`, `CHANGELOG.md`, current git branch, and remote URL. The synthesized `overview.md` keeps the standard headings (`## What it is`, `## Goals`, `## Current branch / focus`, `## Stakeholders`, `## Notes`), cites source files inline, and leaves sections empty when there's no grounded evidence. Up to 5 entry-point docs (e.g., `ARCHITECTURE.md`, top-level `/docs` files) get short `References/<slug>.md` notes pointing at their relative path. The scan is capped at ~10 file reads + 2 git commands so it doesn't stall on large repos. Answer **no** if this is an incidental cwd (`/tmp`, `~/Downloads`, throwaway clone) and you don't want it in the vault.
 
 If you'd rather scaffold by hand (e.g., for a non-interactive setup):
 

@@ -129,16 +129,64 @@ This cwd ($PROJECT_DIR) has no Projects/$PROJECT_NAME/ folder in the vault.
 BEFORE doing anything else this session, ask the user ONCE:
   "Create memory scaffolding for project '$PROJECT_NAME' in the Obsidian vault? (y/n)"
 
-If the user says YES, run these commands to scaffold from templates:
+If the user says NO, respect that for the rest of the session: do not create the
+folder, and do not write project-scoped notes (Decisions/Learnings/Research/Journal).
+General/ and Tools/ notes are still fine.
+
+If the user says YES, scaffold AND prefill from real evidence in the project dir.
+
+STEP 1 — Create folders + base files from templates:
+
   mkdir -p "$PROJECT_VAULT_DIR"/{Decisions,Learnings,Research,References,Journal}
   sed -e 's|__PROJECT_NAME__|$PROJECT_NAME|g' -e 's|__TODAY__|$TODAY|g' \\
     "$TEMPLATE_DIR/INDEX.md" > "$PROJECT_INDEX"
   sed -e 's|__PROJECT_NAME__|$PROJECT_NAME|g' -e 's|__TODAY__|$TODAY|g' \\
     "$TEMPLATE_DIR/overview.md" > "$PROJECT_VAULT_DIR/overview.md"
-Then optionally add a bullet under "## Projects" in $OBSIDIAN_VAULT_PATH/INDEX.md.
 
-If the user says NO, respect that for the rest of the session: do not create the
-folder, and do not write project-scoped notes (Decisions/Learnings/Research/Journal).
-General/ and Tools/ notes are still fine.
+STEP 2 — Inspect $PROJECT_DIR for real, grounded context. Read whichever of these exist:
+  - README.md / README.rst / README — purpose, goals, current status
+  - package.json, pyproject.toml, Cargo.toml, go.mod, Gemfile — stack & deps
+  - CHANGELOG.md, ARCHITECTURE.md, CONTRIBUTING.md, /docs (top level only) — context, processes
+  - Run \`git -C "$PROJECT_DIR" remote get-url origin 2>/dev/null\` for the remote URL.
+  - Run \`git -C "$PROJECT_DIR" branch --show-current 2>/dev/null\` for the current branch.
+
+  Cap the scan: at most ~10 file reads + 2 git commands. Don't recurse into the codebase.
+
+STEP 3 — Replace the placeholder sections in the overview.md you just wrote with synthesized
+content. Keep the existing section headings (## What it is, ## Goals, ## Current branch /
+focus, ## Stakeholders, ## Notes). Cite the source file in parentheses where helpful
+("(from README.md)"). DO NOT invent facts not in the source — leave a section empty if
+the evidence is not there. No bullet should restate the project name; aim for terse,
+factual prose.
+
+STEP 4 — Seed up to 5 References/ notes for the most useful entry-point docs found in
+STEP 2 (e.g., ARCHITECTURE.md, top-level /docs files, OpenAPI specs). Skip README.md
+(it's the source for overview). For each, write Projects/$PROJECT_NAME/References/<slug>.md:
+
+  ---
+  type: reference
+  description: <one-line summary>
+  project: $PROJECT_NAME
+  created: $TODAY
+  ---
+
+  Body: 1-3 sentences on what's in the file + the relative path so it can be reread on
+  demand. Then add the new note under "## References" in $PROJECT_INDEX as
+  \`- [[References/<slug>]] — <one-line>\`.
+
+STEP 5 — Match vault formatting conventions exactly. Inspect an already-scaffolded
+project (e.g. read $OBSIDIAN_VAULT_PATH/Projects/<some-existing>/INDEX.md or overview.md
+if any exist) before writing, and mirror its tone, frontmatter keys, and link style:
+  - Frontmatter MUST have: type, description, created, project. Do NOT add tags unless
+    you observe tags in the existing vault notes.
+  - Cross-references via [[wikilinks]] — bare basename when unique, path-qualified
+    (\`[[References/foo]]\`) otherwise.
+  - Section headings with \`##\`. No emoji, no HTML.
+
+STEP 6 — Optionally append a bullet under "## Projects" in $OBSIDIAN_VAULT_PATH/INDEX.md
+listing the new project (\`- [[Projects/$PROJECT_NAME/INDEX|$PROJECT_NAME]] — <one-line>\`).
+
+STEP 7 — Print a short summary to the user: list the files you created/populated and
+which source files they were grounded in. Then continue with the user's actual request.
 EOF
 fi
