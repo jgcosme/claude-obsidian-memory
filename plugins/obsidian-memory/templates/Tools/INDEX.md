@@ -8,4 +8,4 @@ created: __TODAY__
 
 Always-loaded reference for tools, CLIs, and APIs Claude can use. Add an entry here for every note in this folder.
 
-_(none yet — add tool notes via the obsidian-memory plugin's write triggers, or manually create Tools/<tool>.md with frontmatter)_
+- [[Obsidian]] — vault CLI, frontmatter search syntax, recall examples
