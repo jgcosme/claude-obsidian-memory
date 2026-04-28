@@ -1,5 +1,6 @@
 {
   "name": "jgcosme-plugins",
+  "description": "Personal Claude Code plugins by jgcosme — currently: obsidian-memory",
   "owner": {
     "name": "Jeff Cosme",
     "email": "jeff@thinkingmachin.es"
@@ -7,7 +8,7 @@
   "plugins": [
     {
       "name": "obsidian-memory",
-      "source": ".",
+      "source": "./plugins/obsidian-memory",
       "description": "Obsidian-backed persistent memory for Claude Code",
       "version": "0.1.0"
     }
