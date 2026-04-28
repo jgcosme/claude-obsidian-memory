@@ -1,0 +1,10 @@
+# OS noise
+.DS_Store
+.trash/
+
+# Editor state
+.vscode/
+.idea/
+
+# Local-only test outputs
+*.log

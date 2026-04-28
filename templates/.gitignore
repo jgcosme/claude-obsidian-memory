@@ -1,0 +1,8 @@
+# Obsidian workspace state — changes constantly with UI usage, not worth tracking
+.obsidian/workspace.json
+.obsidian/workspace-mobile.json
+.obsidian/cache
+
+# OS noise
+.DS_Store
+.trash/

@@ -1,0 +1,12 @@
+{
+  "name": "obsidian-memory",
+  "description": "Obsidian-backed persistent memory for Claude Code. SessionStart loads vault context; SessionEnd journals + writes proactive notes with auto-commit.",
+  "version": "0.1.0",
+  "author": {
+    "name": "Jeff Cosme",
+    "email": "jeff@thinkingmachin.es"
+  },
+  "homepage": "https://github.com/jgcosme/claude-obsidian-memory",
+  "repository": "https://github.com/jgcosme/claude-obsidian-memory",
+  "license": "MIT"
+}
