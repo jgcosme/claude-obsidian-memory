@@ -143,50 +143,51 @@ STEP 1 — Create folders + base files from templates:
   sed -e 's|__PROJECT_NAME__|$PROJECT_NAME|g' -e 's|__TODAY__|$TODAY|g' \\
     "$TEMPLATE_DIR/overview.md" > "$PROJECT_VAULT_DIR/overview.md"
 
-STEP 2 — Inspect $PROJECT_DIR for real, grounded context. Read whichever of these exist:
-  - README.md / README.rst / README — purpose, goals, current status
-  - package.json, pyproject.toml, Cargo.toml, go.mod, Gemfile — stack & deps
-  - CHANGELOG.md, ARCHITECTURE.md, CONTRIBUTING.md, /docs (top level only) — context, processes
-  - Run \`git -C "$PROJECT_DIR" remote get-url origin 2>/dev/null\` for the remote URL.
-  - Run \`git -C "$PROJECT_DIR" branch --show-current 2>/dev/null\` for the current branch.
+STEP 2 — Inspect $PROJECT_DIR using your judgment. Read whatever the project actually
+has that establishes what it is and how it works: top-level docs (README, ARCHITECTURE,
+CONTRIBUTING, CHANGELOG, etc.), package manifests, ADR folders, runbooks, design docs,
+RFCs, /docs content, build/CI config — whatever exists. Don't recurse into source code or
+vendored deps. Run \`git -C "$PROJECT_DIR" remote get-url origin 2>/dev/null\` and
+\`git -C "$PROJECT_DIR" branch --show-current 2>/dev/null\` for repo metadata.
 
-  Cap the scan: at most ~10 file reads + 2 git commands. Don't recurse into the codebase.
+STEP 3 — Populate overview.md from the synthesized context. Keep the existing section
+headings (## What it is, ## Goals, ## Current branch / focus, ## Stakeholders, ## Notes).
+Cite source files inline ("(from README.md)"). Leave sections empty when there's no
+grounded evidence — do not invent.
 
-STEP 3 — Replace the placeholder sections in the overview.md you just wrote with synthesized
-content. Keep the existing section headings (## What it is, ## Goals, ## Current branch /
-focus, ## Stakeholders, ## Notes). Cite the source file in parentheses where helpful
-("(from README.md)"). DO NOT invent facts not in the source — leave a section empty if
-the evidence is not there. No bullet should restate the project name; aim for terse,
-factual prose.
+STEP 4 — Seed every relevant subfolder with notes derived from material already in the
+project, classified by content type. Skip README.md (it's the source for overview).
+There is no count cap — use judgment about whether each candidate doc is worth a pointer.
+Skip auto-generated files, license files, vendored READMEs, etc.
 
-STEP 4 — Seed up to 5 References/ notes for the most useful entry-point docs found in
-STEP 2 (e.g., ARCHITECTURE.md, top-level /docs files, OpenAPI specs). Skip README.md
-(it's the source for overview). For each, write Projects/$PROJECT_NAME/References/<slug>.md:
+  - References/ — entry-point pointers a future session would want to come back to:
+    architecture overviews, API/OpenAPI specs, getting-started, contributing guides.
+  - Decisions/ — ADRs and design choices with rationale (docs/adr/*, architecture/
+    decisions/*, ADR markdown files in the repo).
+  - Learnings/ — runbooks, troubleshooting guides, postmortems, "how X actually works".
+  - Research/ — design docs, RFCs, exploratory write-ups, options comparisons.
 
-  ---
-  type: reference
-  description: <one-line summary>
-  project: $PROJECT_NAME
-  created: $TODAY
-  ---
+  Each note: 1-3 sentence summary + the relative path to the source file so it can be
+  reread on demand. Frontmatter:
 
-  Body: 1-3 sentences on what's in the file + the relative path so it can be reread on
-  demand. Then add the new note under "## References" in $PROJECT_INDEX as
-  \`- [[References/<slug>]] — <one-line>\`.
+    ---
+    type: reference | decision | learning | research
+    description: <one-line>
+    project: $PROJECT_NAME
+    created: $TODAY
+    ---
 
-STEP 5 — Match vault formatting conventions exactly. Inspect an already-scaffolded
-project (e.g. read $OBSIDIAN_VAULT_PATH/Projects/<some-existing>/INDEX.md or overview.md
-if any exist) before writing, and mirror its tone, frontmatter keys, and link style:
-  - Frontmatter MUST have: type, description, created, project. Do NOT add tags unless
-    you observe tags in the existing vault notes.
-  - Cross-references via [[wikilinks]] — bare basename when unique, path-qualified
-    (\`[[References/foo]]\`) otherwise.
-  - Section headings with \`##\`. No emoji, no HTML.
+  After writing each note, link it from $PROJECT_INDEX under the matching section
+  ("## References" / "## Decisions" / "## Learnings" / "## Research") as
+  \`- [[Subfolder/<slug>]] — <one-line>\`.
 
-STEP 6 — Optionally append a bullet under "## Projects" in $OBSIDIAN_VAULT_PATH/INDEX.md
+  Journal/ stays empty — it's populated by SessionEnd.
+
+STEP 5 — Optionally append a bullet under "## Projects" in $OBSIDIAN_VAULT_PATH/INDEX.md
 listing the new project (\`- [[Projects/$PROJECT_NAME/INDEX|$PROJECT_NAME]] — <one-line>\`).
 
-STEP 7 — Print a short summary to the user: list the files you created/populated and
-which source files they were grounded in. Then continue with the user's actual request.
+STEP 6 — Summarize for the user: list the files you created/populated and which source
+files in the project they were grounded in. Then address the user's original request
+(which prompted this session).
 EOF
 fi

@@ -100,9 +100,25 @@ When a session ends, `hooks/scripts/session-end.sh` backgrounds a `claude -p` su
 
 The hook returns immediately so it doesn't block your shell; the review runs in the background and logs to `/tmp/claude-memory-review.log`.
 
+### UserPromptSubmit hook (retrieval gate)
+
+On every user message, `hooks/scripts/user-prompt-submit.sh` runs a small "retrieval gate" before the message reaches the main session:
+
+1. Collects the always-loaded indexes (`INDEX.md`, `Tools/INDEX.md`, `General/INDEX.md`, current project's `INDEX.md`).
+2. Spawns `claude -p` with a prompt asking the model: "Given these indexes and the user's message, which (if any) notes are worth reading? Return up to N paths as JSON."
+3. The gate inherits the user's default Claude model (no `--model` flag), so quality matches whatever model is configured. Tools are disabled (`--allowed-tools ""`) — the gate is pure text in/out.
+4. Each returned path is validated against the vault before injection (drops nonexistent paths and any path-traversal attempts).
+5. If any valid paths come back, the hook reads each note's body and emits them as additional context appended to the user's prompt.
+
+**Failure mode is loud and non-blocking**: if `claude -p` errors, JSON parsing fails, or the gate returns junk, the hook prints a one-line warning to stderr (visible to the user), logs details to `/tmp/claude-memory-gate.log`, and exits `0` so the prompt still reaches the main session. You'll see the error but never get blocked from working.
+
+**Cost / latency:** each call is ~2 KB cached input + ~30 output tokens. With Anthropic's prompt cache active, that's fractions of a cent per message; without caching it's a few cents per session if you're on Opus 4.7. Latency is whatever your default model takes to respond — typically 500ms–4s before each user message gets processed.
+
+**Disabling:** set `OBSIDIAN_MEMORY_GATE_ENABLED=false` in `~/.config/claude-memory/config.env`. Path cap and log location are also configurable (`OBSIDIAN_MEMORY_GATE_PATH_CAP`, `MEMORY_GATE_LOG`).
+
 ### Recursion guard
 
-The SessionEnd review uses `claude -p`, which itself triggers a SessionStart hook (fine — it loads vault context for the review) and would otherwise trigger another SessionEnd (bad — infinite loop). The hook sets `CLAUDE_MEMORY_REVIEW=1` for the subprocess; the SessionEnd script exits early when that env var is set.
+The SessionEnd review and the retrieval gate both use `claude -p`. The subprocess itself fires a fresh SessionStart (fine — loads vault context), UserPromptSubmit (would re-run the gate on the gate's own prompt — bad), and SessionEnd on shutdown (would re-run the review — bad). Each hook is invoked with `CLAUDE_MEMORY_REVIEW=1` and `CLAUDE_MEMORY_GATE=1` set on the subprocess environment; the affected scripts exit early when either is set.
 
 ## Vault structure
 
@@ -191,7 +207,14 @@ git -C "$HOME/Documents/Obsidian Vault" log --all -p | grep -E "(xoxp-|sk-|gho_|
 
 ## Adding a new project
 
-The easy path: just `cd` into the project directory and start a Claude session. SessionStart will detect that `Projects/<basename>/` doesn't exist and instruct Claude to ask you once — answer **yes** and Claude scaffolds the folder **and prefills it** from real evidence in the project dir: README, `package.json`/`pyproject.toml`/`Cargo.toml`/`go.mod`, top-level `/docs`, `ARCHITECTURE.md`, `CHANGELOG.md`, current git branch, and remote URL. The synthesized `overview.md` keeps the standard headings (`## What it is`, `## Goals`, `## Current branch / focus`, `## Stakeholders`, `## Notes`), cites source files inline, and leaves sections empty when there's no grounded evidence. Up to 5 entry-point docs (e.g., `ARCHITECTURE.md`, top-level `/docs` files) get short `References/<slug>.md` notes pointing at their relative path. The scan is capped at ~10 file reads + 2 git commands so it doesn't stall on large repos. Answer **no** if this is an incidental cwd (`/tmp`, `~/Downloads`, throwaway clone) and you don't want it in the vault.
+The easy path: just `cd` into the project directory and start a Claude session. SessionStart will detect that `Projects/<basename>/` doesn't exist and instruct Claude to ask you once — answer **yes** and Claude scaffolds the folder **and prefills it** from real evidence in the project dir. Claude uses its own judgment about what to read (top-level docs, package manifests, ADR folders, runbooks, design docs, `/docs`, build/CI config, git metadata) without recursing into source code or vendored deps. It then populates the standard headings in `overview.md` (`## What it is`, `## Goals`, `## Current branch / focus`, `## Stakeholders`, `## Notes`) with source-cited content (sections without grounded evidence are left empty), and seeds the appropriate subfolders by content type:
+
+- `References/` — entry-point pointers (architecture overviews, API/OpenAPI specs, getting-started, contributing)
+- `Decisions/` — ADRs and rationale-bearing design choices (`docs/adr/*`, etc.)
+- `Learnings/` — runbooks, troubleshooting, postmortems, "how X actually works"
+- `Research/` — design docs, RFCs, options comparisons
+
+Each note is a 1–3 sentence summary plus the relative path of the source file so it can be reread on demand. There's no count cap — Claude seeds whatever the project genuinely has, skipping auto-generated, vendored, or license-style files. `Journal/` stays empty (SessionEnd populates it). Answer **no** if this is an incidental cwd (`/tmp`, `~/Downloads`, throwaway clone) and you don't want it in the vault.
 
 If you'd rather scaffold by hand (e.g., for a non-interactive setup):
 
