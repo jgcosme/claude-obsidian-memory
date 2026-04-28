@@ -100,10 +100,17 @@ if [ -f "$OBSIDIAN_VAULT_PATH/README.md" ]; then
 fi
 
 # 5. Auto-generated vault overview (the load-bearing piece).
-if [ -n "$PLUGIN_ROOT" ] && [ -f "$PLUGIN_ROOT/scripts/_vault.py" ]; then
+# Goes through the shared cache helper so subsequent UserPromptSubmit calls
+# can reuse the same cache file when the vault hasn't changed.
+OVERVIEW_HELPER="$PLUGIN_ROOT/hooks/scripts/_overview.sh"
+if [ -n "$PLUGIN_ROOT" ] && [ -x "$OVERVIEW_HELPER" ]; then
   echo "=== VAULT OVERVIEW (auto-generated from frontmatter) ==="
-  python3 "$PLUGIN_ROOT/scripts/_vault.py" --vault "$OBSIDIAN_VAULT_PATH" overview --project "$PROJECT_NAME" 2>/dev/null || \
+  OVERVIEW_OUT=$(bash "$OVERVIEW_HELPER" "$OBSIDIAN_VAULT_PATH" "$PROJECT_NAME")
+  if [ -n "$OVERVIEW_OUT" ]; then
+    printf '%s\n' "$OVERVIEW_OUT"
+  else
     echo "(overview generation failed — check that python3 ≥ 3.9 is available)"
+  fi
   echo ""
 fi
 

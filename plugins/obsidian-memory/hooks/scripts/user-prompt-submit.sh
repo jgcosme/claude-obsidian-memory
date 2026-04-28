@@ -102,10 +102,12 @@ if [ -n "$SESSION_ID" ]; then
 fi
 
 # ---------------------------------------------------------------------------
-# Build the gate's view of the vault: auto-generated overview from frontmatter
-# (cacheable — same across calls until vault contents change).
+# Build the gate's view of the vault. The overview helper handles its own
+# mtime-invalidated cache so successive turns reuse the same overview when
+# the vault hasn't changed — avoiding a full vault walk per prompt.
 # ---------------------------------------------------------------------------
-OVERVIEW=$(python3 "$VAULT_PY" --vault "$VAULT" overview --project "$PROJECT_NAME" 2>/dev/null || true)
+OVERVIEW_HELPER="$PLUGIN_ROOT/hooks/scripts/_overview.sh"
+OVERVIEW=$(bash "$OVERVIEW_HELPER" "$VAULT" "$PROJECT_NAME" 2>/dev/null || true)
 if [ -z "$OVERVIEW" ]; then
   echo "[$(ts)] skipped: vault overview empty" >> "$LOG"
   exit 0
