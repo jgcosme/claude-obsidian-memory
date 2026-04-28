@@ -115,39 +115,24 @@ fi
 # Build prompts: SYSTEM (cacheable) + USER (per-call)
 # ---------------------------------------------------------------------------
 GATE_SYSTEM_PROMPT=$(cat <<PROMPT
-You are a retrieval gate for an Obsidian-backed memory vault.
+Retrieval gate for an Obsidian vault.
 
-Your job: given a user message, decide which (if any) existing notes are
-worth reading to answer well. You may either pick paths directly from the
-overview below, OR specify typed searches we will execute server-side.
+Decide which existing notes help answer the user message. Output ONE JSON object on a single line — no prose, no code fences:
 
-OUTPUT FORMAT: a single JSON object on one line. No prose, no code fences.
-Schema:
-  {
-    "read":   ["relative/path1.md", "relative/path2.md"],
-    "search": [
-      {"type": "decision", "keywords": "auth", "path_prefix": "Projects/foo"},
-      {"created_after": "2026-04-21"}
-    ]
-  }
+{"read":["path/to/note.md", ...], "search":[{"type":"decision","keywords":"auth","path_prefix":"Projects/foo"}, {"created_after":"2026-04-21"}]}
 
-Both fields are optional; the empty object {} means "no notes are relevant."
+Both fields optional. {} means nothing relevant. Combined cap after merge: $PATH_CAP paths — fewer is better.
 
-Rules:
-- Combined cap: at most $PATH_CAP final paths after we merge \`read\` + search
-  hits. Fewer is better.
-- \`read\`: use ONLY paths visible in the vault overview below. Do not invent.
-- \`search\`: each entry may include any subset of these filters (AND-combined):
-    "type"           — frontmatter type (e.g., decision, learning, reference)
-    "keywords"       — space-separated keywords (matched anywhere in the note)
-    "path_prefix"    — relative path prefix (e.g., "Projects/foo")
-    "created_after"  — ISO date YYYY-MM-DD (notes with frontmatter created >= this)
-    "created_before" — ISO date YYYY-MM-DD (notes with created <= this)
-- Use \`search\` when:
-    * the user asks for time-bound info ("yesterday", "last week", "this month") — use created_after
-    * the user asks for a category that may have grown beyond the overview's bullets
-    * you're not sure which specific note matches but the type/keywords are clear
-- Use \`read\` when an overview bullet is an obvious match.
+\`read\`: paths from the overview below; never invent.
+\`search\`: each entry AND-combines any subset of:
+  type            frontmatter type (decision, learning, reference, ...)
+  keywords        space-separated, matched anywhere in note text
+  path_prefix     e.g. "Projects/foo"
+  created_after   YYYY-MM-DD (>=)
+  created_before  YYYY-MM-DD (<=)
+
+Prefer \`search\` for time-bound queries (created_after), category sweeps that may exceed the overview, or when type/keywords are clear but the matching note is not.
+Prefer \`read\` when an overview bullet obviously matches.
 
 === VAULT OVERVIEW ===
 $OVERVIEW

@@ -76,80 +76,72 @@ if [ ! -d "$VAULT/Projects/$PROJECT_NAME" ]; then
 fi
 
 # ---------------------------------------------------------------------------
-# Build the review prompt. Use a quoted heredoc (no expansion) so angle brackets
-# and pipes in the prompt body are treated as literal text. Substitute the
-# placeholders with sed afterwards.
+# Build the review prompt. `read -d ''` captures a quoted heredoc into a
+# variable without bash's $() command-substitution parser scanning the body
+# for unbalanced quotes (apostrophes in the prompt text would otherwise trip
+# it). Placeholders are substituted with sed afterwards.
 # ---------------------------------------------------------------------------
 PLUGIN_ROOT_PATH="${CLAUDE_PLUGIN_ROOT:-}"
-REVIEW_PROMPT=$(cat <<'PROMPT_EOF' | sed \
+read -r -d '' REVIEW_PROMPT_TMPL <<'PROMPT_EOF' || true
+End-of-session memory review.
+
+Vault:       __VAULT__
+Transcript:  __TRANSCRIPT__
+Project:     __PROJECT_NAME__ (at __PROJECT_DIR__)
+Date / time: __TODAY__ __NOW__
+
+1. JOURNAL — always.
+   Path: Projects/__PROJECT_NAME__/Journal/__TODAY__.md
+   New file: frontmatter (type=journal, description=<one-line day summary>, project=__PROJECT_NAME__, created=__TODAY__) + "## Session __NOW__" + 3-6 bullets covering work, decisions, learnings.
+   Existing file: append a new "## Session __NOW__" section. Do not edit content above.
+
+2. PROACTIVE NOTES — write when ALL hold:
+   - Significant: correction, decision, validated approach, novel fact, "remember this".
+   - Useful in future sessions.
+   - Not already covered. Verify with `python3 __PLUGIN_ROOT__/scripts/_vault.py search --type <t> --keywords <k> --json`; read matches; extend a near-duplicate rather than creating a new note.
+
+   Route each candidate (mutually exclusive):
+
+   A. Personal / cross-project — substantive vault note:
+      style preference  → General/Preferences/<slug>.md
+      external system   → General/References/<slug>.md
+      tool reference    → Tools/<slug>.md
+      person            → General/People/<slug>.md
+
+   B. Project-scoped (decision, gotcha, how-X-works) — classify first:
+      Q1. Team-relevant? (other engineers on the project benefit)
+      Q2. Project at __PROJECT_DIR__ has internal docs? (docs/, ADR folders, mkdocs/sphinx, CONTRIBUTING)
+
+      Q1=yes AND Q2=yes → reflect upstream:
+        i.   Destination inside __PROJECT_DIR__: extend an existing doc when one fits, else add a new file under the docs tree following its conventions.
+        ii.  Allowed paths: docs/ tree, ADR folders, *.md inside docs/. Never source, configs, CI, or manifests.
+        iii. Run `git -C __PROJECT_DIR__ status --porcelain -- <target>`. Non-empty → SKIP the project write (would stomp WIP); append a one-liner to the journal noting the deferral (file, suggested location, reason).
+        iv.  Else write the doc edit as uncommitted working-tree changes. Do not git add / commit / push / branch.
+        v.   Also write a thin-pointer vault note (1-3 sentence summary + relative path of the project doc) at Projects/__PROJECT_NAME__/{Decisions,Learnings}/<slug>.md.
+        vi.  List each project-repo write under "## Project repo writes" in the output.
+
+      Otherwise → substantive vault note at Projects/__PROJECT_NAME__/{Decisions,Learnings}/<slug>.md.
+
+   Frontmatter on every new vault note: type, description, created (+ project for project-scoped). type ∈ {preference, reference, decision, learning, tool, people}.
+
+3. MODIFY existing notes only on explicit user correction in the transcript. Smallest edit. Inferred staleness → flag in output, do not edit. Otherwise the only modification allowed is appending to today's journal.
+
+4. INTEGRITY (deltas from steps 1-3 only):
+   - Frontmatter complete (type, description, created; + project under Projects/).
+   - Every [[wikilink]] resolves: path-qualified to a file; bare matches a vault basename.
+   Auto-fix unambiguous issues. List ambiguous ones under "## Integrity flags". Do not scan files outside the deltas (audit.py handles the full vault).
+
+OUTPUT: list of vault paths created/appended, then "## Project repo writes" (paths in __PROJECT_DIR__), then "## Integrity flags". No narrative.
+PROMPT_EOF
+
+REVIEW_PROMPT=$(printf '%s' "$REVIEW_PROMPT_TMPL" | sed \
   -e "s|__VAULT__|${VAULT}|g" \
   -e "s|__TRANSCRIPT__|${TRANSCRIPT}|g" \
   -e "s|__PROJECT_NAME__|${PROJECT_NAME}|g" \
+  -e "s|__PROJECT_DIR__|${PROJECT_DIR}|g" \
   -e "s|__TODAY__|${TODAY}|g" \
   -e "s|__NOW__|${NOW}|g" \
-  -e "s|__PLUGIN_ROOT__|${PLUGIN_ROOT_PATH}|g"
-You are doing an end-of-session memory review for the Obsidian vault at __VAULT__.
-
-Transcript: __TRANSCRIPT__
-Project: __PROJECT_NAME__
-Date/time: __TODAY__ __NOW__
-
-DO ALL OF THE FOLLOWING:
-
-1. JOURNAL (always do this):
-   Write/append a journal entry at Projects/__PROJECT_NAME__/Journal/__TODAY__.md.
-   - If the file does not exist, create it with frontmatter:
-       ---
-       type: journal
-       description: one-line summary of the day's sessions
-       project: __PROJECT_NAME__
-       created: __TODAY__
-       ---
-     Then add a "## Session __NOW__" heading and 3-6 bullets summarizing what was done, key decisions, and notable learnings.
-   - If the file already exists, APPEND a new "## Session __NOW__" section with the same bullet structure. Do NOT modify existing content above.
-
-2. PROACTIVE NOTES (only when worth writing AND not already covered):
-   Scan the transcript for items that meet ALL of these:
-   - Significant: user correction, validated approach, novel fact, decision, or explicit "remember this"
-   - Useful in future sessions (not ephemeral session detail like one-off command output)
-   - Not already in the vault — VERIFY by running a typed search with the
-     plugin's vault CLI before writing. Use the type that matches the
-     candidate (e.g., for a candidate decision: `python3 __PLUGIN_ROOT__/scripts/_vault.py search --type decision --keywords "<keywords>" --json`).
-     Read any matches in full before deciding to write a new note. If a near-
-     duplicate exists, prefer to extend that note rather than create a new one.
-
-   For each that qualifies, write a new note in the appropriate folder:
-   - User correction about coding/communication style: General/Preferences/SLUG.md
-   - Cross-project external system: General/References/SLUG.md
-   - Project decision (choice + rationale): Projects/__PROJECT_NAME__/Decisions/SLUG.md
-   - Project gotcha / how-X-actually-works: Projects/__PROJECT_NAME__/Learnings/SLUG.md
-   - Tool reference (CLI/API usage you did not know before): Tools/SLUG.md
-   - Person info: General/People/SLUG.md
-
-   Every new note MUST have frontmatter with: type, description, created. Add project for project-scoped notes. Type is one of: preference, reference, decision, learning, tool, people.
-
-   No INDEX file maintenance is needed — the next SessionStart's auto-overview
-   picks up new notes automatically from their frontmatter.
-
-3. MODIFY existing notes ONLY when the transcript contains an explicit correction by the user — they directly state that some prior fact, instruction, or memory is wrong or outdated. Make the smallest edit that fixes the issue. Do NOT modify based on inference or implication.
-
-   If the transcript merely suggests an existing note might be stale (without explicit user correction), leave the note alone and flag it in your output summary so the next session can verify.
-
-   Outside of explicit corrections, the only allowed modification is: appending to today's journal.
-
-4. INTEGRITY CHECK (deltas only — only the notes YOU created or modified in steps 1-3, not the whole vault):
-   For each such file, verify:
-   a. Frontmatter has: `type`, `description`, `created`. Files under `Projects/` also need `project`.
-   b. Every `[[wikilink]]` in the body resolves. Path-qualified links (`[[Folder/Note]]`) must point at an existing file. Bare links (`[[note-name]]`) must match the basename of some note in the vault.
-
-   Auto-fix unambiguous frontmatter or typo issues. For anything ambiguous,
-   list it under "## Integrity flags" in your output and leave it. Do NOT scan
-   or fix files outside the deltas — that is the job of the full audit script
-   (`__PLUGIN_ROOT__/scripts/audit.py`).
-
-OUTPUT FORMAT: at the end, print a short list of files created or appended, then any "## Integrity flags". No narrative.
-PROMPT_EOF
-)
+  -e "s|__PLUGIN_ROOT__|${PLUGIN_ROOT_PATH}|g")
 
 export REVIEW_PROMPT
 
