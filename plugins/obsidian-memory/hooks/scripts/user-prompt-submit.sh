@@ -7,13 +7,18 @@
 #
 # Failure mode: loud and non-blocking — errors go to stderr (visible to user)
 # and to a log, but the hook always exits 0 so the prompt is never blocked.
+#
+# Caching: the gate's static portion (instructions + vault indexes) is sent via
+# --system-prompt so Anthropic's prompt cache can reuse it across calls within
+# the 5-minute TTL. The dynamic part (the user message) is the only uncached
+# input per call.
 
 set -u
 
 # ---------------------------------------------------------------------------
-# Recursion guard. The gate spawns `claude -p`, which itself fires a fresh
-# UserPromptSubmit (and SessionEnd on shutdown). We set CLAUDE_MEMORY_GATE=1
-# and CLAUDE_MEMORY_REVIEW=1 on the subprocess; this short-circuits both.
+# Recursion guard. The gate spawns `claude -p --bare` which already skips
+# hooks, but we keep the env var guard as a belt-and-suspenders measure in case
+# the user invokes the gate hook outside of the bare-mode subprocess somehow.
 # ---------------------------------------------------------------------------
 if [ -n "${CLAUDE_MEMORY_GATE:-}" ] || [ -n "${CLAUDE_MEMORY_REVIEW:-}" ]; then
   exit 0
@@ -25,15 +30,32 @@ fi
 CONFIG_FILE="${HOME}/.config/claude-memory/config.env"
 if [ -f "$CONFIG_FILE" ]; then
   # shellcheck disable=SC1090
-  . "$CONFIG_FILE"
+  . "$CONFIG_FILE" 2>/dev/null || true
 fi
 
 VAULT="${OBSIDIAN_VAULT_PATH:-$HOME/Documents/Obsidian Vault}"
 LOG="${MEMORY_GATE_LOG:-/tmp/claude-memory-gate.log}"
+LOG_MAX_BYTES="${MEMORY_LOG_MAX_BYTES:-1048576}"  # 1 MB default
 PATH_CAP="${OBSIDIAN_MEMORY_GATE_PATH_CAP:-3}"
+NOTE_BYTE_CAP="${OBSIDIAN_MEMORY_GATE_NOTE_BYTE_CAP:-10240}"  # 10 KB per injected note
 GATE_ENABLED="${OBSIDIAN_MEMORY_GATE_ENABLED:-true}"
+DEBUG="${OBSIDIAN_MEMORY_DEBUG:-false}"
+
+ts() { date '+%Y-%m-%d %H:%M:%S'; }
+debug() {
+  [ "$DEBUG" = "true" ] && echo "[$(ts)] DEBUG: $*" >> "$LOG"
+}
+
+# Rotate log if oversized (keep one previous as .log.1)
+if [ -f "$LOG" ]; then
+  bytes=$(wc -c < "$LOG" 2>/dev/null | tr -d ' ' || echo 0)
+  if [ "${bytes:-0}" -gt "$LOG_MAX_BYTES" ]; then
+    mv -f "$LOG" "${LOG}.1" 2>/dev/null || true
+  fi
+fi
 
 if [ "$GATE_ENABLED" != "true" ]; then
+  debug "gate disabled by config"
   exit 0
 fi
 
@@ -44,29 +66,43 @@ elif command -v claude >/dev/null 2>&1; then
   CLAUDE_BIN="$(command -v claude)"
 else
   echo "[gate] claude CLI not found on PATH; vault gate skipped this turn" >&2
-  echo "[$(date '+%Y-%m-%d %H:%M:%S')] skipped: no claude CLI" >> "$LOG"
+  echo "[$(ts)] skipped: no claude CLI" >> "$LOG"
   exit 0
 fi
 
-# Vault must exist
 if [ ! -d "$VAULT" ]; then
-  echo "[$(date '+%Y-%m-%d %H:%M:%S')] skipped: vault not found at '$VAULT'" >> "$LOG"
+  echo "[$(ts)] skipped: vault not found at '$VAULT'" >> "$LOG"
   exit 0
 fi
 
 # ---------------------------------------------------------------------------
-# Read payload (JSON on stdin) — extract the user's prompt
+# Read payload (JSON on stdin) — extract user prompt and session id
 # ---------------------------------------------------------------------------
 PAYLOAD=$(cat)
 USER_MESSAGE=$(echo "$PAYLOAD" | jq -r '.prompt // empty' 2>/dev/null || true)
+SESSION_ID=$(echo "$PAYLOAD" | jq -r '.session_id // empty' 2>/dev/null || true)
 
 if [ -z "$USER_MESSAGE" ]; then
-  echo "[$(date '+%Y-%m-%d %H:%M:%S')] skipped: no .prompt in payload" >> "$LOG"
+  echo "[$(ts)] skipped: no .prompt in payload" >> "$LOG"
   exit 0
 fi
 
+debug "session_id=$SESSION_ID prompt_len=${#USER_MESSAGE}"
+
 PROJECT_DIR="${CLAUDE_PROJECT_DIR:-$PWD}"
 PROJECT_NAME=$(basename "$PROJECT_DIR")
+
+# Per-session dedup file: tracks which paths have already been injected this
+# session so we don't repeatedly inject the same note across consecutive turns.
+DEDUP_DIR="${MEMORY_GATE_DEDUP_DIR:-/tmp/claude-memory-gate-state}"
+mkdir -p "$DEDUP_DIR" 2>/dev/null || true
+DEDUP_FILE=""
+if [ -n "$SESSION_ID" ]; then
+  # Sanitize session id for filename use
+  SAFE_ID=$(echo "$SESSION_ID" | tr -c 'A-Za-z0-9._-' '_')
+  DEDUP_FILE="$DEDUP_DIR/$SAFE_ID.injected"
+  touch "$DEDUP_FILE" 2>/dev/null || DEDUP_FILE=""
+fi
 
 # ---------------------------------------------------------------------------
 # Collect always-loaded indexes + the current project's index (if any)
@@ -87,18 +123,19 @@ do
 done
 
 if [ -z "$INDEX_TEXT" ]; then
-  echo "[$(date '+%Y-%m-%d %H:%M:%S')] skipped: no indexes found in vault" >> "$LOG"
+  echo "[$(ts)] skipped: no indexes found in vault" >> "$LOG"
   exit 0
 fi
 
 # ---------------------------------------------------------------------------
-# Build the gate prompt
+# Build prompts: SYSTEM (cacheable, stable) + USER (per-call)
 # ---------------------------------------------------------------------------
-GATE_PROMPT=$(cat <<PROMPT
+GATE_SYSTEM_PROMPT=$(cat <<PROMPT
 You are a retrieval gate for an Obsidian-backed memory vault.
 
-Given the user message below and the vault index excerpts, decide which (if
-any) existing notes are worth reading to answer the user's request well.
+Your job: given a user message and the vault index excerpts below, decide
+which (if any) existing notes are worth reading to answer the user's request
+well.
 
 OUTPUT FORMAT: a single JSON object on one line. No prose, no code fences.
 Schema:
@@ -112,32 +149,37 @@ Rules:
 
 === VAULT INDEXES ===
 $INDEX_TEXT
-
-=== USER MESSAGE ===
-$USER_MESSAGE
-
-JSON only:
 PROMPT
 )
 
+GATE_USER_PROMPT="USER MESSAGE:
+$USER_MESSAGE
+
+JSON only:"
+
 # ---------------------------------------------------------------------------
-# Call the gate. Inherit the user's default model (no --model flag).
-# Disallow tools — gate is pure text in/out.
+# Call the gate. --bare skips hooks/LSP/plugins/auto-memory in the subprocess.
+# --tools \"\" disables all tools. Inherit the user's default model.
 # ---------------------------------------------------------------------------
 GATE_OUTPUT=$(CLAUDE_MEMORY_GATE=1 CLAUDE_MEMORY_REVIEW=1 \
-  "$CLAUDE_BIN" -p "$GATE_PROMPT" --allowed-tools "" 2>>"$LOG")
+  "$CLAUDE_BIN" -p "$GATE_USER_PROMPT" \
+    --system-prompt "$GATE_SYSTEM_PROMPT" \
+    --tools "" \
+    --bare \
+    2>>"$LOG")
 GATE_EXIT=$?
+
+debug "gate exit=$GATE_EXIT output_len=${#GATE_OUTPUT}"
 
 if [ $GATE_EXIT -ne 0 ]; then
   echo "[gate] retrieval gate failed (claude -p exit=$GATE_EXIT) — proceeding without vault context" >&2
-  echo "[$(date '+%Y-%m-%d %H:%M:%S')] gate exited $GATE_EXIT; output: $GATE_OUTPUT" >> "$LOG"
+  echo "[$(ts)] gate exited $GATE_EXIT; output: $GATE_OUTPUT" >> "$LOG"
   exit 0
 fi
 
 # ---------------------------------------------------------------------------
 # Extract first balanced {...} block from the model output.
 # Robust to surrounding whitespace, prose, or code-fence wrapping.
-# (Use -c so stdin stays available for the gate output.)
 # ---------------------------------------------------------------------------
 JSON_BLOB=$(echo "$GATE_OUTPUT" | python3 -c '
 import sys, json
@@ -178,7 +220,7 @@ sys.exit(3)
 if [ -z "$JSON_BLOB" ]; then
   TRUNC=$(echo "$GATE_OUTPUT" | head -c 200)
   echo "[gate] could not parse JSON from gate output — proceeding without vault context" >&2
-  echo "[$(date '+%Y-%m-%d %H:%M:%S')] no parseable JSON; output (first 200 chars): $TRUNC" >> "$LOG"
+  echo "[$(ts)] no parseable JSON; output (first 200 chars): $TRUNC" >> "$LOG"
   exit 0
 fi
 
@@ -186,7 +228,7 @@ fi
 PATHS=$(echo "$JSON_BLOB" | jq -r --argjson cap "$PATH_CAP" '.read[:$cap][]?' 2>/dev/null || true)
 
 if [ -z "$PATHS" ]; then
-  echo "[$(date '+%Y-%m-%d %H:%M:%S')] gate: no paths returned" >> "$LOG"
+  echo "[$(ts)] gate: no paths returned" >> "$LOG"
   exit 0
 fi
 
@@ -196,28 +238,69 @@ fi
 TMP=$(mktemp)
 trap 'rm -f "$TMP"' EXIT
 
+# Reject path that is absolute or has any `..` component.
+is_safe_path() {
+  local p="$1"
+  case "$p" in /*) return 1 ;; esac
+  local IFS='/'
+  # shellcheck disable=SC2086
+  set -f
+  for comp in $p; do
+    if [ "$comp" = ".." ]; then
+      return 1
+    fi
+  done
+  set +f
+  return 0
+}
+
+# Has this path already been injected this session?
+already_injected() {
+  local p="$1"
+  [ -n "$DEDUP_FILE" ] && grep -Fxq "$p" "$DEDUP_FILE" 2>/dev/null
+}
+
+mark_injected() {
+  local p="$1"
+  [ -n "$DEDUP_FILE" ] && echo "$p" >> "$DEDUP_FILE"
+}
+
 INJECTED=0
 DROPPED=()
+DUPED=()
 while IFS= read -r p; do
   [ -z "$p" ] && continue
-  # Reject path-traversal attempts
-  case "$p" in
-    /*|*..*) DROPPED+=("$p"); continue ;;
-  esac
-  if [ -f "$VAULT/$p" ]; then
-    {
-      echo ""
-      echo "--- $p ---"
-      cat "$VAULT/$p"
-    } >> "$TMP"
-    INJECTED=$((INJECTED+1))
-  else
-    DROPPED+=("$p")
+  if ! is_safe_path "$p"; then
+    DROPPED+=("$p (unsafe)")
+    continue
   fi
+  if [ ! -f "$VAULT/$p" ]; then
+    DROPPED+=("$p (missing)")
+    continue
+  fi
+  if already_injected "$p"; then
+    DUPED+=("$p")
+    continue
+  fi
+  {
+    echo ""
+    echo "--- $p ---"
+    # Per-note size cap: head -c is byte-bounded
+    head -c "$NOTE_BYTE_CAP" "$VAULT/$p"
+    note_size=$(wc -c < "$VAULT/$p" 2>/dev/null | tr -d ' ' || echo 0)
+    if [ "${note_size:-0}" -gt "$NOTE_BYTE_CAP" ]; then
+      printf '\n[…truncated at %s bytes; full content via obsidian read path="%s"]\n' "$NOTE_BYTE_CAP" "$p"
+    fi
+  } >> "$TMP"
+  mark_injected "$p"
+  INJECTED=$((INJECTED+1))
 done <<< "$PATHS"
 
 if [ ${#DROPPED[@]} -gt 0 ]; then
-  echo "[$(date '+%Y-%m-%d %H:%M:%S')] gate: dropped invalid paths: ${DROPPED[*]}" >> "$LOG"
+  echo "[$(ts)] gate: dropped paths: ${DROPPED[*]}" >> "$LOG"
+fi
+if [ ${#DUPED[@]} -gt 0 ]; then
+  echo "[$(ts)] gate: skipped already-injected this session: ${DUPED[*]}" >> "$LOG"
 fi
 
 if [ "$INJECTED" -gt 0 ]; then
@@ -226,9 +309,9 @@ if [ "$INJECTED" -gt 0 ]; then
   cat "$TMP"
   echo ""
   echo "=== END VAULT CONTEXT ==="
-  echo "[$(date '+%Y-%m-%d %H:%M:%S')] gate: injected $INJECTED notes" >> "$LOG"
+  echo "[$(ts)] gate: injected $INJECTED notes" >> "$LOG"
 else
-  echo "[$(date '+%Y-%m-%d %H:%M:%S')] gate: nothing to inject" >> "$LOG"
+  echo "[$(ts)] gate: nothing new to inject" >> "$LOG"
 fi
 
 exit 0

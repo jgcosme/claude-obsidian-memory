@@ -6,6 +6,11 @@ Reports:
 - Broken wikilinks (target file not found)
 - Orphan notes (no incoming wikilink, excluding INDEX.md files)
 - Dead INDEX entries (subset of broken wikilinks, surfaced separately)
+- Duplicate basenames (multiple notes share the same filename, making bare
+  [[wikilinks]] ambiguous — Obsidian picks the closest one, but it's worth
+  knowing about).
+
+Requires Python 3.9+.
 
 Usage:
   python3 scripts/audit.py                   # print markdown report to stdout
@@ -26,7 +31,8 @@ from datetime import datetime
 from pathlib import Path
 
 WIKILINK_RE = re.compile(r"\[\[([^\]]+)\]\]")
-FRONTMATTER_RE = re.compile(r"^---\s*\n(.*?)\n---\s*\n", re.DOTALL)
+# Tolerate optional UTF-8 BOM and CRLF line endings in the frontmatter delimiter.
+FRONTMATTER_RE = re.compile(r"^﻿?---\s*\r?\n(.*?)\r?\n---\s*\r?\n", re.DOTALL)
 SKIP_DIRS = {".git", ".obsidian", ".trash", "node_modules"}
 
 
@@ -188,6 +194,15 @@ def main() -> int:
         if f not in referenced:
             orphans.append(str(f.relative_to(vault)))
 
+    # Duplicate basenames — bare [[wikilinks]] become ambiguous
+    duplicate_basenames: list[dict] = []
+    for stem, paths in basename_map.items():
+        if len(paths) > 1:
+            duplicate_basenames.append({
+                "basename": f"{stem}.md",
+                "paths": [str(p.relative_to(vault)) for p in paths],
+            })
+
     if args.json:
         print(json.dumps({
             "vault": str(vault),
@@ -198,11 +213,13 @@ def main() -> int:
                 "broken_wikilinks": len(broken_links),
                 "dead_index_entries": len(dead_index_entries),
                 "orphan_notes": len(orphans),
+                "duplicate_basenames": len(duplicate_basenames),
             },
             "frontmatter_issues": fm_issues,
             "broken_wikilinks": broken_links,
             "dead_index_entries": dead_index_entries,
             "orphan_notes": orphans,
+            "duplicate_basenames": duplicate_basenames,
         }, indent=2))
         return 0
 
@@ -243,14 +260,25 @@ def main() -> int:
         print("_(none)_")
     print()
 
+    print("## Duplicate basenames (bare wikilinks become ambiguous)\n")
+    if duplicate_basenames:
+        for d in duplicate_basenames:
+            print(f"- `{d['basename']}` shared by:")
+            for p in d["paths"]:
+                print(f"  - `{p}`")
+    else:
+        print("_(none)_")
+    print()
+
     print("## Summary")
     print(f"- Files scanned: {len(md_files)}")
     print(f"- Frontmatter issues: {len(fm_issues)}")
     print(f"- Broken wikilinks: {len(broken_links)}")
     print(f"- Dead INDEX entries: {len(dead_index_entries)}")
     print(f"- Orphan notes: {len(orphans)}")
+    print(f"- Duplicate basenames: {len(duplicate_basenames)}")
 
-    has_issues = bool(fm_issues or broken_links or orphans)
+    has_issues = bool(fm_issues or broken_links or orphans or duplicate_basenames)
     return 1 if has_issues else 0
 
 

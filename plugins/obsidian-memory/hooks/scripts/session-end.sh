@@ -15,8 +15,17 @@ fi
 
 VAULT="${OBSIDIAN_VAULT_PATH:-$HOME/Documents/Obsidian Vault}"
 LOG="${MEMORY_REVIEW_LOG:-/tmp/claude-memory-review.log}"
+LOG_MAX_BYTES="${MEMORY_LOG_MAX_BYTES:-1048576}"  # 1 MB default
 AUTOCOMMIT="${OBSIDIAN_MEMORY_AUTOCOMMIT:-true}"
 AUTOPUSH="${OBSIDIAN_MEMORY_AUTOPUSH:-false}"
+
+# Rotate log if it's grown too large (keep one previous as .log.1)
+if [ -f "$LOG" ]; then
+  bytes=$(wc -c < "$LOG" 2>/dev/null | tr -d ' ' || echo 0)
+  if [ "${bytes:-0}" -gt "$LOG_MAX_BYTES" ]; then
+    mv -f "$LOG" "${LOG}.1" 2>/dev/null || true
+  fi
+fi
 
 # Locate `claude` CLI
 if [ -n "${CLAUDE_BIN:-}" ] && [ -x "$CLAUDE_BIN" ]; then
@@ -83,7 +92,7 @@ Transcript: __TRANSCRIPT__
 Project: __PROJECT_NAME__
 Date/time: __TODAY__ __NOW__
 
-DO BOTH OF THE FOLLOWING:
+DO ALL OF THE FOLLOWING:
 
 1. JOURNAL (always do this):
    Write/append a journal entry at Projects/__PROJECT_NAME__/Journal/__TODAY__.md.
@@ -140,32 +149,51 @@ export REVIEW_PROMPT
 # any vault changes (no push by default — controlled by AUTOPUSH).
 # ---------------------------------------------------------------------------
 nohup bash -c '
-  if [ "'"$RUN_REVIEW"'" = "true" ]; then
-    echo "[$(date "+%Y-%m-%d %H:%M:%S")] starting review for project='"$PROJECT_NAME"' transcript='"$TRANSCRIPT"'" >> "'"$LOG"'"
-    CLAUDE_MEMORY_REVIEW=1 "'"$CLAUDE_BIN"'" -p "$REVIEW_PROMPT" \
-      --allowed-tools "Read,Write,Edit,Bash" \
-      >> "'"$LOG"'" 2>&1
-    echo "[$(date "+%Y-%m-%d %H:%M:%S")] review complete (exit=$?)" >> "'"$LOG"'"
+  ts() { date "+%Y-%m-%d %H:%M:%S"; }
+  PROJECT_NAME='"$(printf %q "$PROJECT_NAME")"'
+  TRANSCRIPT='"$(printf %q "$TRANSCRIPT")"'
+  VAULT='"$(printf %q "$VAULT")"'
+  LOG='"$(printf %q "$LOG")"'
+  CLAUDE_BIN='"$(printf %q "$CLAUDE_BIN")"'
+  RUN_REVIEW='"$RUN_REVIEW"'
+  AUTOCOMMIT='"$AUTOCOMMIT"'
+  AUTOPUSH='"$AUTOPUSH"'
+
+  if [ "$RUN_REVIEW" = "true" ]; then
+    echo "[$(ts)] starting review for project=$PROJECT_NAME transcript=$TRANSCRIPT" >> "$LOG"
+    CLAUDE_MEMORY_REVIEW=1 "$CLAUDE_BIN" -p "$REVIEW_PROMPT" \
+      --tools "Read,Write,Edit,Bash" \
+      --bare \
+      >> "$LOG" 2>&1
+    echo "[$(ts)] review complete (exit=$?)" >> "$LOG"
   fi
 
-  if [ "'"$AUTOCOMMIT"'" = "true" ] && [ -d "'"$VAULT"'/.git" ]; then
-    cd "'"$VAULT"'" || exit 0
+  if [ "$AUTOCOMMIT" = "true" ] && [ -d "$VAULT/.git" ]; then
+    cd "$VAULT" || exit 0
+    # Serialize git ops across overlapping sessions
+    LOCK_FD=9
+    LOCK_FILE="$VAULT/.git/.claude-memory.lock"
+    exec 9>"$LOCK_FILE" 2>/dev/null
+    if command -v flock >/dev/null 2>&1; then
+      flock -w 30 9 || { echo "[$(ts)] lock timeout, skipping commit" >> "$LOG"; exit 0; }
+    fi
     if [ -n "$(git status --porcelain)" ]; then
+      NOW_TS=$(date "+%Y-%m-%d %H:%M")
       git add -A
-      if git commit -m "session writes '"$TODAY $NOW"' ('"$PROJECT_NAME"')" >> "'"$LOG"'" 2>&1; then
-        echo "[$(date "+%Y-%m-%d %H:%M:%S")] vault auto-committed" >> "'"$LOG"'"
-        if [ "'"$AUTOPUSH"'" = "true" ]; then
-          if git push >> "'"$LOG"'" 2>&1; then
-            echo "[$(date "+%Y-%m-%d %H:%M:%S")] vault auto-pushed" >> "'"$LOG"'"
+      if git commit -m "session writes $NOW_TS ($PROJECT_NAME)" >> "$LOG" 2>&1; then
+        echo "[$(ts)] vault auto-committed" >> "$LOG"
+        if [ "$AUTOPUSH" = "true" ]; then
+          if git push >> "$LOG" 2>&1; then
+            echo "[$(ts)] vault auto-pushed" >> "$LOG"
           else
-            echo "[$(date "+%Y-%m-%d %H:%M:%S")] vault push failed" >> "'"$LOG"'"
+            echo "[$(ts)] vault push failed" >> "$LOG"
           fi
         fi
       else
-        echo "[$(date "+%Y-%m-%d %H:%M:%S")] vault commit failed" >> "'"$LOG"'"
+        echo "[$(ts)] vault commit failed" >> "$LOG"
       fi
     else
-      echo "[$(date "+%Y-%m-%d %H:%M:%S")] vault clean — nothing to commit" >> "'"$LOG"'"
+      echo "[$(ts)] vault clean — nothing to commit" >> "$LOG"
     fi
   fi
 ' >/dev/null 2>&1 &

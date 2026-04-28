@@ -7,7 +7,7 @@
 #   1. CLAUDE_PLUGIN_ROOT env var (set by Claude Code when invoking plugin scripts)
 #   2. ../  relative to this script (when invoked directly)
 
-set -eu
+set -u
 
 # ---------------------------------------------------------------------------
 # Resolve plugin root and load config
@@ -25,9 +25,15 @@ if [ ! -d "$PLUGIN_ROOT/templates" ]; then
 fi
 
 CONFIG_FILE="${HOME}/.config/claude-memory/config.env"
+# Source config inside a subshell-style guard so a malformed config.env doesn't
+# abort setup mid-way through scaffolding.
 if [ -f "$CONFIG_FILE" ]; then
-  # shellcheck disable=SC1090
-  . "$CONFIG_FILE"
+  if ! ( set +u; . "$CONFIG_FILE" ) 2>/dev/null; then
+    echo "warning: $CONFIG_FILE failed to source cleanly — using defaults" >&2
+  else
+    # shellcheck disable=SC1090
+    . "$CONFIG_FILE" || true
+  fi
 fi
 
 VAULT_PATH="${OBSIDIAN_VAULT_PATH:-$HOME/Documents/Obsidian Vault}"
@@ -64,15 +70,17 @@ else
 fi
 
 # ---------------------------------------------------------------------------
-# 3. Vault scaffold
+# 3. Vault scaffold — base directory layout
 # ---------------------------------------------------------------------------
 mkdir -p "$VAULT_PATH"
 mkdir -p "$VAULT_PATH/Tools"
 mkdir -p "$VAULT_PATH/General/Preferences" "$VAULT_PATH/General/People" "$VAULT_PATH/General/Admin" "$VAULT_PATH/General/References"
 mkdir -p "$VAULT_PATH/Projects"
 
-# Render a template into the vault, substituting __TODAY__ and __VAULT_PATH__.
-# Skip if the destination already exists.
+# ---------------------------------------------------------------------------
+# 4. Render templates recursively, skipping per-project templates and metadata.
+# Substitutes __TODAY__ and __VAULT_PATH__ in every rendered note.
+# ---------------------------------------------------------------------------
 render() {
   local src="$1"
   local dst="$2"
@@ -88,25 +96,30 @@ render() {
   echo "[+] $dst"
 }
 
-render "$PLUGIN_ROOT/templates/INDEX.md"                            "$VAULT_PATH/INDEX.md"
-render "$PLUGIN_ROOT/templates/Tools/INDEX.md"                      "$VAULT_PATH/Tools/INDEX.md"
-render "$PLUGIN_ROOT/templates/Tools/Obsidian.md"                   "$VAULT_PATH/Tools/Obsidian.md"
-render "$PLUGIN_ROOT/templates/General/INDEX.md"                    "$VAULT_PATH/General/INDEX.md"
-render "$PLUGIN_ROOT/templates/General/user.md"                     "$VAULT_PATH/General/user.md"
-render "$PLUGIN_ROOT/templates/General/References/secrets-env.md"   "$VAULT_PATH/General/References/secrets-env.md"
+# Walk templates/ — anything that's not under Projects/PROJECT_NAME/ (per-project
+# scaffold, applied lazily by SessionStart) or a .gitignore (handled separately)
+# gets rendered into the vault preserving its relative path.
+TEMPLATES_DIR="$PLUGIN_ROOT/templates"
+while IFS= read -r src; do
+  rel="${src#"$TEMPLATES_DIR"/}"
+  case "$rel" in
+    Projects/*) continue ;;       # per-project, scaffolded by SessionStart
+    .gitignore) continue ;;       # handled below
+  esac
+  render "$src" "$VAULT_PATH/$rel"
+done < <(find "$TEMPLATES_DIR" -type f -name '*.md' | sort)
 
-# .gitignore at vault root
-if [ ! -f "$VAULT_PATH/.gitignore" ]; then
-  cp "$PLUGIN_ROOT/templates/.gitignore" "$VAULT_PATH/.gitignore"
+# .gitignore at vault root (no template substitution; copy verbatim)
+if [ -f "$TEMPLATES_DIR/.gitignore" ] && [ ! -f "$VAULT_PATH/.gitignore" ]; then
+  cp "$TEMPLATES_DIR/.gitignore" "$VAULT_PATH/.gitignore"
   echo "[+] $VAULT_PATH/.gitignore"
 fi
 
 echo ""
 echo "Done. Next steps:"
-echo "  1. (Optional) Open the vault in Obsidian.app: \`open -a Obsidian \"$VAULT_PATH\"\`"
-echo "  2. (Optional) Init git in the vault for change-tracking + auto-commit:"
-echo "     cd \"$VAULT_PATH\" && git init -b main && git add -A && git commit -m 'Initial commit'"
-echo "  3. Edit $CONFIG_FILE to override defaults if needed."
-echo "  4. Add per-project folders as you start work:"
-echo "     mkdir -p \"$VAULT_PATH/Projects/<name>/{Journal,Decisions,Learnings,Research,References}\""
-echo "     and create INDEX.md + overview.md from $PLUGIN_ROOT/templates/Projects/PROJECT_NAME/"
+echo "  1. (Optional) Open the vault in Obsidian.app: open -a Obsidian \"$VAULT_PATH\""
+echo "  2. (Optional but recommended) Init git in the vault for change-tracking + auto-commit:"
+echo "       cd \"$VAULT_PATH\" && git init -b main && git add -A && git commit -m 'Initial commit'"
+echo "  3. Edit $CONFIG_FILE to override defaults (vault path, gate behavior, autocommit/push)."
+echo "  4. cd into a project directory and start a Claude session — when prompted, answer 'yes'"
+echo "     to scaffold that project's vault folder. Claude prefills it from real evidence in the repo."

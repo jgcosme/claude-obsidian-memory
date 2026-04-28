@@ -35,7 +35,7 @@ In `Tools/<tool>.md`, document:
 2. Update the relevant `Tools/<tool>.md` to reference the variable name.
 3. `grep` the vault before committing to confirm the literal value never landed in any note:
    ```bash
-   grep -rE "(xoxp-|sk-|gho_|ghp_|AKIA|AIza)" ~/Documents/Obsidian\ Vault | grep -v "VAR_NAME"
+   grep -rE "(xoxp-|xoxb-|sk-[A-Za-z0-9]|gho_|ghp_|github_pat_|AKIA|AIza|AIzaSy)" "__VAULT_PATH__"
    ```
 
 ## Why this pattern
