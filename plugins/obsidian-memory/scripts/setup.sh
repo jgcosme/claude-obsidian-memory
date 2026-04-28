@@ -88,11 +88,12 @@ render() {
   echo "[+] $dst"
 }
 
-render "$PLUGIN_ROOT/templates/INDEX.md"           "$VAULT_PATH/INDEX.md"
-render "$PLUGIN_ROOT/templates/Tools/INDEX.md"     "$VAULT_PATH/Tools/INDEX.md"
-render "$PLUGIN_ROOT/templates/Tools/Obsidian.md"  "$VAULT_PATH/Tools/Obsidian.md"
-render "$PLUGIN_ROOT/templates/General/INDEX.md"   "$VAULT_PATH/General/INDEX.md"
-render "$PLUGIN_ROOT/templates/General/user.md"    "$VAULT_PATH/General/user.md"
+render "$PLUGIN_ROOT/templates/INDEX.md"                            "$VAULT_PATH/INDEX.md"
+render "$PLUGIN_ROOT/templates/Tools/INDEX.md"                      "$VAULT_PATH/Tools/INDEX.md"
+render "$PLUGIN_ROOT/templates/Tools/Obsidian.md"                   "$VAULT_PATH/Tools/Obsidian.md"
+render "$PLUGIN_ROOT/templates/General/INDEX.md"                    "$VAULT_PATH/General/INDEX.md"
+render "$PLUGIN_ROOT/templates/General/user.md"                     "$VAULT_PATH/General/user.md"
+render "$PLUGIN_ROOT/templates/General/References/secrets-env.md"   "$VAULT_PATH/General/References/secrets-env.md"
 
 # .gitignore at vault root
 if [ ! -f "$VAULT_PATH/.gitignore" ]; then

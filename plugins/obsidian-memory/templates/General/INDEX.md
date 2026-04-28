@@ -21,4 +21,4 @@ _(none yet — colleagues, contacts)_
 _(none yet — recurring tasks, accounts, processes)_
 
 ## References
-_(none yet — cross-cutting external systems)_
+- [[References/secrets-env]] — secrets pattern: tokens in `~/.config/claude-memory/secrets.env`, vault notes reference variable names
