@@ -56,10 +56,14 @@ if [ ! -d "$VAULT" ]; then
   exit 0
 fi
 
-# Skip if Projects/<name>/ doesn't exist (unknown project — don't auto-create journal)
+# Whether to run the journal/review step. The user is asked at SessionStart
+# before scaffolding Projects/<name>/, so its absence here means they declined
+# (or never set it up). In that case, skip the review but still autocommit any
+# General/Tools writes the session produced.
+RUN_REVIEW=true
 if [ ! -d "$VAULT/Projects/$PROJECT_NAME" ]; then
-  echo "[$(date '+%Y-%m-%d %H:%M:%S')] skipped: no Projects/$PROJECT_NAME/ folder; project must be scaffolded first" >> "$LOG"
-  exit 0
+  RUN_REVIEW=false
+  echo "[$(date '+%Y-%m-%d %H:%M:%S')] no Projects/$PROJECT_NAME/ folder; skipping review, will still commit dirty vault state" >> "$LOG"
 fi
 
 # ---------------------------------------------------------------------------
@@ -117,7 +121,15 @@ DO BOTH OF THE FOLLOWING:
 
    Outside of explicit corrections, the only allowed modifications are: appending to today's journal, and updating INDEX files to list new notes.
 
-OUTPUT FORMAT: at the end, print a short list of files created or appended. No narrative.
+4. INTEGRITY CHECK (deltas only — only the notes YOU created or modified in steps 1-3, not the whole vault):
+   For each such file, verify:
+   a. Frontmatter has: `type`, `description`, `created`. Files under `Projects/` also need `project`.
+   b. Every `[[wikilink]]` in the body resolves. Path-qualified links (`[[Folder/Note]]`) must point at an existing file. Bare links (`[[note-name]]`) must match the basename of some note in the vault.
+   c. New notes (not journal appends) must be listed in the relevant INDEX.md — the INDEX of the folder they live in (e.g., `Projects/__PROJECT_NAME__/INDEX.md` for project notes, `General/INDEX.md` for cross-project).
+
+   Auto-fix what is unambiguous (add the missing INDEX entry, fix an obvious typo in a wikilink). For anything ambiguous, list it under "## Integrity flags" in your output and leave it. Do NOT scan or fix files outside the deltas — that is the job of the full audit script (`scripts/audit.py`).
+
+OUTPUT FORMAT: at the end, print a short list of files created or appended, then any "## Integrity flags". No narrative.
 PROMPT_EOF
 )
 
@@ -128,11 +140,13 @@ export REVIEW_PROMPT
 # any vault changes (no push by default — controlled by AUTOPUSH).
 # ---------------------------------------------------------------------------
 nohup bash -c '
-  echo "[$(date "+%Y-%m-%d %H:%M:%S")] starting review for project='"$PROJECT_NAME"' transcript='"$TRANSCRIPT"'" >> "'"$LOG"'"
-  CLAUDE_MEMORY_REVIEW=1 "'"$CLAUDE_BIN"'" -p "$REVIEW_PROMPT" \
-    --allowed-tools "Read,Write,Edit,Bash" \
-    >> "'"$LOG"'" 2>&1
-  echo "[$(date "+%Y-%m-%d %H:%M:%S")] review complete (exit=$?)" >> "'"$LOG"'"
+  if [ "'"$RUN_REVIEW"'" = "true" ]; then
+    echo "[$(date "+%Y-%m-%d %H:%M:%S")] starting review for project='"$PROJECT_NAME"' transcript='"$TRANSCRIPT"'" >> "'"$LOG"'"
+    CLAUDE_MEMORY_REVIEW=1 "'"$CLAUDE_BIN"'" -p "$REVIEW_PROMPT" \
+      --allowed-tools "Read,Write,Edit,Bash" \
+      >> "'"$LOG"'" 2>&1
+    echo "[$(date "+%Y-%m-%d %H:%M:%S")] review complete (exit=$?)" >> "'"$LOG"'"
+  fi
 
   if [ "'"$AUTOCOMMIT"'" = "true" ] && [ -d "'"$VAULT"'/.git" ]; then
     cd "'"$VAULT"'" || exit 0

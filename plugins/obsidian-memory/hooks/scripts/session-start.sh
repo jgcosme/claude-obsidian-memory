@@ -108,13 +108,37 @@ INSTRUCTIONS
   echo ""
 }
 
-# 5. Current project scope.
-PROJECT_INDEX="$OBSIDIAN_VAULT_PATH/Projects/$PROJECT_NAME/INDEX.md"
+# 5. Current project scope. If Projects/<name>/ doesn't exist yet, do NOT
+#    silently scaffold — instead, instruct Claude to ask the user at the start
+#    of the conversation. This avoids polluting the vault with folders for
+#    incidental cwds (~/, /tmp, throwaway clones).
+PROJECT_VAULT_DIR="$OBSIDIAN_VAULT_PATH/Projects/$PROJECT_NAME"
+PROJECT_INDEX="$PROJECT_VAULT_DIR/INDEX.md"
+TEMPLATE_DIR="${CLAUDE_PLUGIN_ROOT:-}/templates/Projects/PROJECT_NAME"
+TODAY=$(date +%Y-%m-%d)
+
 if [ -f "$PROJECT_INDEX" ]; then
   echo "=== PROJECT: $PROJECT_NAME ==="
   cat "$PROJECT_INDEX"
 else
-  echo "=== PROJECT: $PROJECT_NAME (no memory scaffolded) ==="
-  echo "No Projects/$PROJECT_NAME/ folder exists in the vault."
-  echo "Confirm with the user before creating one — verify the project name and scope first."
+  cat <<EOF
+=== PROJECT: $PROJECT_NAME (not yet scaffolded) ===
+
+This cwd ($PROJECT_DIR) has no Projects/$PROJECT_NAME/ folder in the vault.
+
+BEFORE doing anything else this session, ask the user ONCE:
+  "Create memory scaffolding for project '$PROJECT_NAME' in the Obsidian vault? (y/n)"
+
+If the user says YES, run these commands to scaffold from templates:
+  mkdir -p "$PROJECT_VAULT_DIR"/{Decisions,Learnings,Research,References,Journal}
+  sed -e 's|__PROJECT_NAME__|$PROJECT_NAME|g' -e 's|__TODAY__|$TODAY|g' \\
+    "$TEMPLATE_DIR/INDEX.md" > "$PROJECT_INDEX"
+  sed -e 's|__PROJECT_NAME__|$PROJECT_NAME|g' -e 's|__TODAY__|$TODAY|g' \\
+    "$TEMPLATE_DIR/overview.md" > "$PROJECT_VAULT_DIR/overview.md"
+Then optionally add a bullet under "## Projects" in $OBSIDIAN_VAULT_PATH/INDEX.md.
+
+If the user says NO, respect that for the rest of the session: do not create the
+folder, and do not write project-scoped notes (Decisions/Learnings/Research/Journal).
+General/ and Tools/ notes are still fine.
+EOF
 fi

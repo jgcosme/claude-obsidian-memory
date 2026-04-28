@@ -79,7 +79,7 @@ Every new Claude session triggers `hooks/scripts/session-start.sh`, which:
    - The root `INDEX.md` (entry point + organization rules)
    - `Tools/INDEX.md` (cross-cutting tool reference)
    - `General/INDEX.md` (identity, preferences, people, admin, references)
-   - `Projects/<project-name>/INDEX.md` if it exists (project-scoped recall)
+   - `Projects/<project-name>/INDEX.md` **if it exists**. If it doesn't, the hook injects an instruction telling Claude to ask you once at the start of the session whether to scaffold it (running the same template-substitution commands the setup script uses). If you decline, Claude respects that for the rest of the session — `General/` and `Tools/` writes are still allowed, but no project-scoped notes.
    - **Usage instructions** telling Claude how/when to read and write memory
 
 Claude only sees indexes — small, dense pointers. Deep recall happens on demand via `obsidian search` and `obsidian read`. Total injection is typically 3–6 KB.
@@ -89,13 +89,14 @@ Claude only sees indexes — small, dense pointers. Deep recall happens on deman
 When a session ends, `hooks/scripts/session-end.sh` backgrounds a `claude -p` subprocess that:
 
 1. Reads the transcript.
-2. **Always** writes a journal entry to `Projects/<project>/Journal/YYYY-MM-DD.md`. If the file already exists for today (multiple sessions), appends a `## Session HH:MM` section.
+2. Writes a journal entry to `Projects/<project>/Journal/YYYY-MM-DD.md` (appends a `## Session HH:MM` section if the file already exists for today). **Skipped** if `Projects/<project>/` doesn't exist — i.e., you declined to scaffold at session-start.
 3. **Proactively** writes new notes when ALL of these hold:
    - the information is significant (correction, validated approach, decision, novel fact),
    - it will be useful in future sessions,
    - **and** no existing note already covers it (verified via `obsidian search`).
 4. **Modifies** existing notes only on **explicit user correction** in the transcript — not on inference. If the transcript merely *suggests* a note might be stale, the review flags it for the next session instead of editing silently.
-5. After all writes, `git add -A && git commit` if the vault is a git repo (`OBSIDIAN_MEMORY_AUTOCOMMIT=true` by default). Push is opt-in (`OBSIDIAN_MEMORY_AUTOPUSH=true`).
+5. **Delta integrity check**: for each file the review created or modified above, verifies frontmatter is complete, every `[[wikilink]]` resolves, and new notes are listed in the relevant `INDEX.md`. Auto-fixes unambiguous issues; ambiguous ones are surfaced under `## Integrity flags` in the review output. (Vault-wide auditing is a separate script — see "Auditing the vault" below.)
+6. `git add -A && git commit` runs **independently** of the review: if the vault is a git repo and dirty (`OBSIDIAN_MEMORY_AUTOCOMMIT=true` by default), any pending writes get committed — including `General/`/`Tools/` writes from sessions where the project journal step was skipped. Push is opt-in (`OBSIDIAN_MEMORY_AUTOPUSH=true`).
 
 The hook returns immediately so it doesn't block your shell; the review runs in the background and logs to `/tmp/claude-memory-review.log`.
 
@@ -190,23 +191,44 @@ git -C "$HOME/Documents/Obsidian Vault" log --all -p | grep -E "(xoxp-|sk-|gho_|
 
 ## Adding a new project
 
-When you start work in a new project directory:
+The easy path: just `cd` into the project directory and start a Claude session. SessionStart will detect that `Projects/<basename>/` doesn't exist and instruct Claude to ask you once — answer **yes** and Claude runs the template-substitution commands itself. Answer **no** if this is an incidental cwd (`/tmp`, `~/Downloads`, throwaway clone) and you don't want it in the vault.
+
+If you'd rather scaffold by hand (e.g., for a non-interactive setup):
 
 ```bash
-# Replace <name> with your project's directory basename
+NAME="<your-project-basename>"
 cd "$HOME/Documents/Obsidian Vault/Projects"
-mkdir -p "<name>"/{Journal,Decisions,Learnings,Research,References}
+mkdir -p "$NAME"/{Journal,Decisions,Learnings,Research,References}
 
-# Use the templates as a starting point
-sed "s/__PROJECT_NAME__/<name>/g; s/__TODAY__/$(date +%Y-%m-%d)/g" \
+sed "s/__PROJECT_NAME__/$NAME/g; s/__TODAY__/$(date +%Y-%m-%d)/g" \
   "$CLAUDE_PLUGIN_ROOT/templates/Projects/PROJECT_NAME/INDEX.md" \
-  > "<name>/INDEX.md"
-sed "s/__PROJECT_NAME__/<name>/g; s/__TODAY__/$(date +%Y-%m-%d)/g" \
+  > "$NAME/INDEX.md"
+sed "s/__PROJECT_NAME__/$NAME/g; s/__TODAY__/$(date +%Y-%m-%d)/g" \
   "$CLAUDE_PLUGIN_ROOT/templates/Projects/PROJECT_NAME/overview.md" \
-  > "<name>/overview.md"
+  > "$NAME/overview.md"
 ```
 
-Then `cd` into the project dir (so cwd basename matches) and start a Claude session — the SessionStart hook will pick up the new project automatically.
+## Auditing the vault
+
+`scripts/audit.py` does a full vault integrity scan — separate from the per-session delta check that runs in SessionEnd. It reports:
+
+- **Frontmatter issues** — notes missing required keys (`type`, `description`, `created`; plus `project` under `Projects/`).
+- **Broken wikilinks** — `[[target]]` references that don't resolve. Resolution mirrors Obsidian: path-qualified targets try vault-root, source-relative, then path-suffix match; bare targets match by basename anywhere.
+- **Dead INDEX entries** — broken wikilinks that originate from an `INDEX.md`, surfaced separately so you can prioritize them.
+- **Orphan notes** — files with no incoming wikilink (excluding `INDEX.md` files themselves).
+
+```bash
+# Markdown report to stdout
+python3 "$CLAUDE_PLUGIN_ROOT/scripts/audit.py"
+
+# JSON for programmatic use
+python3 "$CLAUDE_PLUGIN_ROOT/scripts/audit.py" --json
+
+# Override vault path
+python3 "$CLAUDE_PLUGIN_ROOT/scripts/audit.py" --vault /path/to/vault
+```
+
+Exits non-zero when issues are found, so you can wire it into a pre-push hook or a weekly cron. It does **not** auto-fix — fixes are deliberately manual since orphans and missing frontmatter often need human judgment.
 
 ## Troubleshooting
 
@@ -216,7 +238,7 @@ Then `cd` into the project dir (so cwd basename matches) and start a Claude sess
 - Confirm Obsidian.app is running and the CLI is registered (Settings → General → Command line interface).
 
 **SessionEnd review didn't run / didn't write a journal**
-- Check `/tmp/claude-memory-review.log`. If it says "skipped: no Projects/<name>/ folder", scaffold that project (see "Adding a new project").
+- Check `/tmp/claude-memory-review.log`. If it says `no Projects/<name>/ folder; skipping review, will still commit dirty vault state`, you declined to scaffold (or never were asked) — start a new session in that directory and answer **yes** to the scaffolding prompt, or scaffold manually (see "Adding a new project"). Note: any `General/`/`Tools/` writes from the session were still committed.
 - If it says "no transcript at ''", check that `jq` is installed.
 - If you don't see any log at all, the hook may not be registered — try `/reload-plugins` and restart your session.
 
