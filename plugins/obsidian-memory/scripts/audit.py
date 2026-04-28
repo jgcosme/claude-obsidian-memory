@@ -4,8 +4,7 @@
 Reports:
 - Frontmatter issues (missing required keys: type, description, created; project under Projects/)
 - Broken wikilinks (target file not found)
-- Orphan notes (no incoming wikilink, excluding INDEX.md files)
-- Dead INDEX entries (subset of broken wikilinks, surfaced separately)
+- Orphan notes (no incoming wikilink, excluding README.md files)
 - Duplicate basenames (multiple notes share the same filename, making bare
   [[wikilinks]] ambiguous — Obsidian picks the closest one, but it's worth
   knowing about).
@@ -24,64 +23,33 @@ from __future__ import annotations
 
 import argparse
 import json
-import os
 import re
 import sys
 from datetime import datetime
 from pathlib import Path
 
+# Shared module: parse_frontmatter, collect_md_files, resolve_vault, FRONTMATTER_RE
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from _vault import (  # noqa: E402
+    FRONTMATTER_RE,
+    collect_md_files,
+    parse_frontmatter,
+    resolve_vault,
+)
+
 WIKILINK_RE = re.compile(r"\[\[([^\]]+)\]\]")
-# Tolerate optional UTF-8 BOM and CRLF line endings in the frontmatter delimiter.
-FRONTMATTER_RE = re.compile(r"^﻿?---\s*\r?\n(.*?)\r?\n---\s*\r?\n", re.DOTALL)
-SKIP_DIRS = {".git", ".obsidian", ".trash", "node_modules"}
 
-
-def resolve_vault(cli_vault: str | None) -> Path:
-    if cli_vault:
-        return Path(os.path.expanduser(cli_vault)).resolve()
-    if os.environ.get("OBSIDIAN_VAULT_PATH"):
-        return Path(os.path.expanduser(os.environ["OBSIDIAN_VAULT_PATH"])).resolve()
-    config = Path.home() / ".config/claude-memory/config.env"
-    if config.is_file():
-        for line in config.read_text().splitlines():
-            line = line.strip()
-            if line.startswith("OBSIDIAN_VAULT_PATH="):
-                v = line.split("=", 1)[1].strip().strip('"').strip("'")
-                return Path(os.path.expanduser(v)).resolve()
-    return (Path.home() / "Documents/Obsidian Vault").resolve()
-
-
-def parse_frontmatter(text: str) -> dict[str, str] | None:
-    m = FRONTMATTER_RE.match(text)
-    if not m:
-        return None
-    fm: dict[str, str] = {}
-    for line in m.group(1).splitlines():
-        if ":" in line and not line.lstrip().startswith("#"):
-            k, v = line.split(":", 1)
-            fm[k.strip()] = v.strip()
-    return fm
-
-
-def collect_md_files(vault: Path) -> list[Path]:
-    out: list[Path] = []
-    for root, dirs, files in os.walk(vault):
-        dirs[:] = [d for d in dirs if d not in SKIP_DIRS]
-        for name in files:
-            if name.endswith(".md"):
-                out.append(Path(root) / name)
-    return sorted(out)
+# Files Obsidian / docs / git tooling expect at the vault or folder root —
+# they're not "memory notes" and shouldn't be flagged as orphans.
+NAVIGATION_NAMES = {"README.md"}
 
 
 def extract_wikilinks(body: str) -> list[str]:
     targets: list[str] = []
     for m in WIKILINK_RE.finditer(body):
         raw = m.group(1)
-        # Strip alias: [[target|alias]] -> target
         target = raw.split("|", 1)[0].strip()
-        # Strip heading anchor: [[target#heading]] -> target
         target = target.split("#", 1)[0].strip()
-        # Strip block ref: [[target^block]] -> target
         target = target.split("^", 1)[0].strip()
         if target:
             targets.append(target)
@@ -97,15 +65,10 @@ def resolve_wikilink(
 ) -> list[Path]:
     """Return resolved relative paths (empty list = broken).
 
-    Obsidian wikilink resolution (best-effort):
-      - Path-qualified targets (containing `/`):
-          1. exact path from vault root
-          2. path relative to source note's directory
-          3. path-suffix match (any file whose relative path ends with the target)
-        Returns the first match found.
-      - Bare targets: every file in the vault sharing that basename. We can't
-        cheaply replicate Obsidian's "closest unambiguous match" rule, so for
-        orphan-detection we mark all candidates as referenced.
+    Path-qualified: vault root, then source-relative, then path-suffix match.
+    Bare: every file in the vault sharing that basename (we mark all candidates
+    as referenced for orphan-detection since we can't replicate Obsidian's
+    closest-match rule cheaply).
     """
     needle = target if target.endswith(".md") else f"{target}.md"
 
@@ -153,7 +116,6 @@ def main() -> int:
 
     fm_issues: list[dict] = []
     broken_links: list[dict] = []
-    dead_index_entries: list[dict] = []
     referenced: set[Path] = set()
 
     for f in md_files:
@@ -165,7 +127,10 @@ def main() -> int:
             continue
 
         fm = parse_frontmatter(text)
-        if fm is None:
+        # README files are navigation/prose and don't need frontmatter.
+        if f.name in NAVIGATION_NAMES:
+            pass
+        elif fm is None:
             fm_issues.append({"file": str(rel), "issue": "no frontmatter block"})
         else:
             required = ["type", "description", "created"]
@@ -179,22 +144,18 @@ def main() -> int:
         for target in extract_wikilinks(body):
             resolved = resolve_wikilink(target, vault, basename_map, f, all_relpaths)
             if not resolved:
-                entry = {"file": str(rel), "link": target}
-                broken_links.append(entry)
-                if f.name == "INDEX.md":
-                    dead_index_entries.append(entry)
+                broken_links.append({"file": str(rel), "link": target})
             else:
                 for r in resolved:
                     referenced.add(vault / r)
 
     orphans: list[str] = []
     for f in md_files:
-        if f.name == "INDEX.md":
+        if f.name in NAVIGATION_NAMES:
             continue
         if f not in referenced:
             orphans.append(str(f.relative_to(vault)))
 
-    # Duplicate basenames — bare [[wikilinks]] become ambiguous
     duplicate_basenames: list[dict] = []
     for stem, paths in basename_map.items():
         if len(paths) > 1:
@@ -211,13 +172,11 @@ def main() -> int:
                 "files_scanned": len(md_files),
                 "frontmatter_issues": len(fm_issues),
                 "broken_wikilinks": len(broken_links),
-                "dead_index_entries": len(dead_index_entries),
                 "orphan_notes": len(orphans),
                 "duplicate_basenames": len(duplicate_basenames),
             },
             "frontmatter_issues": fm_issues,
             "broken_wikilinks": broken_links,
-            "dead_index_entries": dead_index_entries,
             "orphan_notes": orphans,
             "duplicate_basenames": duplicate_basenames,
         }, indent=2))
@@ -244,15 +203,7 @@ def main() -> int:
         print("_(none)_")
     print()
 
-    print("## Dead INDEX entries\n")
-    if dead_index_entries:
-        for it in dead_index_entries:
-            print(f"- `{it['file']}` → `[[{it['link']}]]`")
-    else:
-        print("_(none)_")
-    print()
-
-    print("## Orphan notes (no incoming wikilink, excluding INDEX.md)\n")
+    print("## Orphan notes (no incoming wikilink, excluding README.md)\n")
     if orphans:
         for p in orphans:
             print(f"- `{p}`")
@@ -274,7 +225,6 @@ def main() -> int:
     print(f"- Files scanned: {len(md_files)}")
     print(f"- Frontmatter issues: {len(fm_issues)}")
     print(f"- Broken wikilinks: {len(broken_links)}")
-    print(f"- Dead INDEX entries: {len(dead_index_entries)}")
     print(f"- Orphan notes: {len(orphans)}")
     print(f"- Duplicate basenames: {len(duplicate_basenames)}")
 

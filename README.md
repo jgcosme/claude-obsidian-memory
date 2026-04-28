@@ -1,15 +1,17 @@
 # obsidian-memory
 
-A Claude Code plugin that turns an Obsidian vault into Claude's persistent memory. Vault content is loaded into context at session start; session-end runs an automated review that journals what happened and proactively writes new notes when something significant was learned. All writes are git-trackable, so nothing changes without a diff you can review.
+A Claude Code plugin that turns a directory of markdown files into Claude's persistent memory. At session start, the plugin walks the vault and emits a structured overview generated from each note's frontmatter — no INDEX files to maintain. At every user message, a retrieval gate decides whether vault notes are relevant and injects matched bodies into context. At session end, an automated review journals what happened and writes new notes for anything significant. All writes are git-trackable.
 
 ## Why
 
-Claude Code has a per-project auto-memory directory (`~/.claude/projects/*/memory/`), but it's siloed by project, not browsable, and not editable in Obsidian's UI. This plugin replaces it with an Obsidian-backed system that:
+Claude Code has a per-project auto-memory directory (`~/.claude/projects/*/memory/`), but it's siloed by project, not browsable, and not editable in Obsidian's UI. This plugin replaces it with a vault-backed system that:
 
-- Loads only **index files** at session start (small payload, deep recall via `obsidian search`).
-- Scopes per-project memory by `cwd` basename, while keeping cross-project knowledge (tools, identity, preferences, people) always loaded.
-- Writes new memory automatically at session end, with a dedup check (`obsidian search`) to avoid redundant notes.
-- Is git-tracked: every memory write is a diff. Auto-commit is on by default; auto-push is opt-in.
+- **Auto-generates the vault overview** at session start by walking frontmatter — no hand-maintained INDEX files.
+- **Retrieval gate** on every user message: a small `claude -p` call decides which vault notes (if any) belong in context, either by picking paths from the overview or by running typed searches (`type=decision`, `created_after=...`, etc.).
+- **Scoped per-project** by `cwd` basename, with cross-project knowledge (tools, identity, preferences, people) always available.
+- **Frontmatter is the source of truth.** Every note declares its own type and metadata; the overview, search, and audit all derive from frontmatter.
+- **Git-tracked.** Every memory write is a diff. Auto-commit is on by default; auto-push is opt-in.
+- **Vault-as-data, not vault-as-Obsidian.** Obsidian.app is optional — the plugin's search runs in pure Python over the vault directory.
 
 ## Prerequisites
 
@@ -49,14 +51,15 @@ After install, run the setup script to scaffold the vault, config file, and secr
 bash "$CLAUDE_PLUGIN_ROOT/scripts/setup.sh"
 ```
 
-This is **idempotent** — re-running it won't overwrite existing files. It creates:
+This is **idempotent** — re-running it won't overwrite existing files, and it migrates older vault layouts (renames `INDEX.md` → `README.md`, archives any sub-INDEX files to `.archive/v1.1-migration/`). It creates:
 
 - `~/Documents/Obsidian Vault/` (or whatever `OBSIDIAN_VAULT_PATH` points at)
-  - `INDEX.md`, `Tools/INDEX.md`, `General/INDEX.md`, `General/user.md`
-  - `Projects/` (empty; per-project folders added on demand)
-  - `.gitignore` for Obsidian state files
-- `~/.config/claude-memory/config.env` — paths and behavior toggles
-- `~/.config/claude-memory/secrets.env` — empty template, `chmod 600`
+  - `README.md` — prose orientation (always loaded into context).
+  - `Tools/`, `General/{Preferences,People,Admin,References}/`, `General/user.md`.
+  - `Projects/` (empty; per-project folders added on demand by SessionStart).
+  - `.gitignore` for Obsidian state files.
+- `~/.config/claude-memory/config.env` — paths and behavior toggles.
+- `~/.config/claude-memory/secrets.env` — empty template, `chmod 600`.
 
 **Recommended next step:** `git init` the vault.
 
@@ -75,16 +78,15 @@ Once the vault is a git repo, the SessionEnd hook auto-commits all memory writes
 
 Every new Claude session triggers `hooks/scripts/session-start.sh`, which:
 
-1. Opens Obsidian.app (so the CLI is responsive).
+1. Opens Obsidian.app if available (purely so the optional `obsidian` CLI works).
 2. Derives the **project name** from `$CLAUDE_PROJECT_DIR` basename (or `$PWD`).
 3. Injects into context:
-   - The root `INDEX.md` (entry point + organization rules)
-   - `Tools/INDEX.md` (cross-cutting tool reference)
-   - `General/INDEX.md` (identity, preferences, people, admin, references)
-   - `Projects/<project-name>/INDEX.md` **if it exists**. If it doesn't, the hook injects an instruction telling Claude to ask you once at the start of the session whether to scaffold it (running the same template-substitution commands the setup script uses). If you decline, Claude respects that for the rest of the session — `General/` and `Tools/` writes are still allowed, but no project-scoped notes.
-   - **Usage instructions** telling Claude how/when to read and write memory
+   - **Bootstrap instructions** — recall/remember/update guidance for Claude.
+   - **Vault `README.md`** — prose orientation (frontmatter convention, layout, recall examples).
+   - **Auto-generated vault overview** — produced fresh by `scripts/_vault.py overview --project <name>` walking every note's frontmatter. Bullets out Tools, General, and the current project's Decisions/Learnings/Research/References/Journal. Other projects appear as a name list (not deep-listed) to keep the payload small.
+   - **Project-scaffolding prompt** if `Projects/<project-name>/` doesn't exist yet — tells Claude to ask you before creating it, and prefill from real evidence in the project dir.
 
-Claude only sees indexes — small, dense pointers. Deep recall happens on demand via `obsidian search` and `obsidian read`. Total injection is typically 3–6 KB.
+Claude sees a structured catalog of what exists, generated fresh from frontmatter every session. There are no INDEX files anywhere in the vault. Adding/renaming notes shows up automatically in the next session's overview. Total injection is typically 3–8 KB depending on vault size.
 
 ### SessionEnd hook
 
@@ -95,10 +97,10 @@ When a session ends, `hooks/scripts/session-end.sh` backgrounds a `claude -p` su
 3. **Proactively** writes new notes when ALL of these hold:
    - the information is significant (correction, validated approach, decision, novel fact),
    - it will be useful in future sessions,
-   - **and** no existing note already covers it (verified via `obsidian search`).
+   - **and** no existing note already covers it. Dedup is verified by running a typed search via `_vault.py search --type <T> --keywords "<K>"` before writing.
 4. **Modifies** existing notes only on **explicit user correction** in the transcript — not on inference. If the transcript merely *suggests* a note might be stale, the review flags it for the next session instead of editing silently.
-5. **Delta integrity check**: for each file the review created or modified above, verifies frontmatter is complete, every `[[wikilink]]` resolves, and new notes are listed in the relevant `INDEX.md`. Auto-fixes unambiguous issues; ambiguous ones are surfaced under `## Integrity flags` in the review output. (Vault-wide auditing is a separate script — see "Auditing the vault" below.)
-6. `git add -A && git commit` runs **independently** of the review: if the vault is a git repo and dirty (`OBSIDIAN_MEMORY_AUTOCOMMIT=true` by default), any pending writes get committed — including `General/`/`Tools/` writes from sessions where the project journal step was skipped. Push is opt-in (`OBSIDIAN_MEMORY_AUTOPUSH=true`).
+5. **Delta integrity check**: for each file the review created or modified above, verifies frontmatter is complete and every `[[wikilink]]` resolves. (No INDEX maintenance step — the auto-overview at SessionStart picks up new notes from frontmatter automatically.)
+6. `git add -A && git commit` runs **independently** of the review: if the vault is a git repo and dirty (`OBSIDIAN_MEMORY_AUTOCOMMIT=true` by default), any pending writes get committed — including `General/`/`Tools/` writes from sessions where the project journal step was skipped. Push is opt-in (`OBSIDIAN_MEMORY_AUTOPUSH=true`). Wrapped in `flock` to prevent concurrent sessions racing on `git add`.
 
 The hook returns immediately so it doesn't block your shell; the review runs in the background and logs to `/tmp/claude-memory-review.log`.
 
@@ -106,17 +108,17 @@ The hook returns immediately so it doesn't block your shell; the review runs in 
 
 On every user message, `hooks/scripts/user-prompt-submit.sh` runs a small "retrieval gate" before the message reaches the main session:
 
-1. Collects the always-loaded indexes (`INDEX.md`, `Tools/INDEX.md`, `General/INDEX.md`, current project's `INDEX.md`).
-2. Spawns `claude -p` with a prompt asking the model: "Given these indexes and the user's message, which (if any) notes are worth reading? Return up to N paths as JSON."
-3. The gate inherits the user's default Claude model (no `--model` flag), so quality matches whatever model is configured. Tools are disabled (`--allowed-tools ""`) — the gate is pure text in/out.
-4. Each returned path is validated against the vault before injection (drops nonexistent paths and any path-traversal attempts).
-5. If any valid paths come back, the hook reads each note's body and emits them as additional context appended to the user's prompt.
+1. Builds the auto-generated vault overview (same content as SessionStart sees — cacheable across calls).
+2. Spawns `claude -p --bare --tools "" --system-prompt <overview>` with the user's message as the prompt. The `--bare` flag skips nested hooks/auto-memory/CLAUDE.md so the gate's subprocess can't recurse. `--tools ""` disables all tools — the gate is pure text in / JSON out.
+3. The gate inherits the user's default Claude model (no `--model` flag), so quality matches whatever model is configured. Anthropic's prompt cache reuses the overview (in `--system-prompt`) across calls within the 5-min TTL.
+4. The gate returns JSON: `{"read": ["..."], "search": [{"type":"...", ...}]}`. The hook executes any typed searches via `_vault.py search`, merges read paths + search hits, validates each path exists in the vault and isn't a path-traversal attempt, deduplicates against the per-session injected list, caps at `OBSIDIAN_MEMORY_GATE_PATH_CAP` (default 3) total.
+5. Surviving paths get their bodies read and emitted as additional context (truncated per-note at `OBSIDIAN_MEMORY_GATE_NOTE_BYTE_CAP`, default 10 KB).
 
-**Failure mode is loud and non-blocking**: if `claude -p` errors, JSON parsing fails, or the gate returns junk, the hook prints a one-line warning to stderr (visible to the user), logs details to `/tmp/claude-memory-gate.log`, and exits `0` so the prompt still reaches the main session. You'll see the error but never get blocked from working.
+**Why design B (paths + searches):** the overview alone is enough for "what did we decide about auth?" → pick `Decisions/auth.md`. But for "what did I learn last week?" the overview doesn't expose `created` dates, so the gate emits `{"search": [{"type": "learning", "created_after": "2026-04-21"}]}` and we run that as a typed search. Same gate call handles both.
 
-**Cost / latency:** each call is ~2 KB cached input + ~30 output tokens. With Anthropic's prompt cache active, that's fractions of a cent per message; without caching it's a few cents per session if you're on Opus 4.7. Latency is whatever your default model takes to respond — typically 500ms–4s before each user message gets processed.
+**Failure mode is loud and non-blocking**: if `claude -p` errors, JSON parsing fails, or the gate returns junk, the hook prints a one-line warning to stderr (visible to the user), logs details to `/tmp/claude-memory-gate.log`, and exits `0` so the prompt still reaches the main session.
 
-**Disabling:** set `OBSIDIAN_MEMORY_GATE_ENABLED=false` in `~/.config/claude-memory/config.env`. Path cap and log location are also configurable (`OBSIDIAN_MEMORY_GATE_PATH_CAP`, `MEMORY_GATE_LOG`).
+**Disabling:** set `OBSIDIAN_MEMORY_GATE_ENABLED=false` in `~/.config/claude-memory/config.env`. Path cap, note byte cap, log location, dedup state dir are also configurable.
 
 ### Recursion guard
 
@@ -126,19 +128,16 @@ The SessionEnd review and the retrieval gate both use `claude -p`. The subproces
 
 ```
 Obsidian Vault/
-├── INDEX.md                       — root index (always loaded)
-├── Tools/                         — CLI/API/tool reference (always loaded)
-│   ├── INDEX.md
+├── README.md                      — prose orientation (always loaded)
+├── Tools/                         — CLI/API/tool reference
 │   └── <tool>.md                  — frontmatter: type=tool
-├── General/                       — cross-project (always loaded)
-│   ├── INDEX.md
+├── General/                       — cross-project knowledge
 │   ├── user.md                    — your profile
 │   ├── Preferences/               — coding/communication style, validated approaches
 │   ├── People/                    — colleagues, contacts
 │   ├── Admin/                     — recurring tasks, accounts, processes
 │   └── References/                — cross-cutting external systems
-└── Projects/<name>/               — per-project (loaded by cwd basename)
-    ├── INDEX.md
+└── Projects/<name>/               — per-project (one folder per cwd basename)
     ├── overview.md                — what the project is, goals, status
     ├── Journal/YYYY-MM-DD.md      — written by SessionEnd
     ├── Decisions/                 — choice + rationale
@@ -147,32 +146,38 @@ Obsidian Vault/
     └── References/                — project-specific external pointers
 ```
 
+There are **no `INDEX.md` files anywhere**. The vault overview Claude sees at session start is generated fresh by walking each note's frontmatter — adding/renaming notes shows up automatically. If you upgraded from an earlier version, `bash "$CLAUDE_PLUGIN_ROOT/scripts/setup.sh"` migrates: renames root `INDEX.md` → `README.md` and archives sub-INDEX files to `.archive/v1.1-migration/`.
+
 ### Frontmatter convention
 
-Every note has YAML frontmatter:
+Every note (except `README.md` files) has YAML frontmatter:
 
 ```yaml
 ---
-type: tool | user | preference | people | admin | reference | overview | journal | decision | learning | research | index
+type: tool | user | preference | people | admin | reference | overview | journal | decision | learning | research
 description: one-line hook (what's in this note)
 created: YYYY-MM-DD
 project: <project-name>            # only for project-scoped notes
 ---
 ```
 
-This enables typed recall via the Obsidian CLI's bracket syntax:
+Frontmatter is the source of truth — the auto-overview, the gate's typed searches, and the audit script all derive from it. Typed recall via the plugin's pure-Python search CLI (works without Obsidian.app):
 
 ```bash
 # Yesterday's learnings across all projects
 YESTERDAY=$(date -v-1d +%Y-%m-%d)
-obsidian search query="path:Projects [type:learning] [created:$YESTERDAY]"
+python3 "$CLAUDE_PLUGIN_ROOT/scripts/_vault.py" search \
+  --type learning --created-after "$YESTERDAY"
 
 # All decisions for project X
-obsidian search query="path:Projects/foo [type:decision]"
+python3 "$CLAUDE_PLUGIN_ROOT/scripts/_vault.py" search \
+  --type decision --path-prefix "Projects/foo"
 
-# Cross-project user preferences
-obsidian search query="path:General/Preferences"
+# Notes mentioning "auth" anywhere, ranked by frequency
+python3 "$CLAUDE_PLUGIN_ROOT/scripts/_vault.py" search --keywords "auth"
 ```
+
+If Obsidian.app is running and the CLI is registered, `obsidian search` is also available with bracket-syntax frontmatter filters (`[type:decision]`, `path:Projects/foo`). It doesn't support date-range queries — use the Python CLI for those.
 
 ## Configuration
 
@@ -240,21 +245,20 @@ cd "$HOME/Documents/Obsidian Vault/Projects"
 mkdir -p "$NAME"/{Journal,Decisions,Learnings,Research,References}
 
 sed "s/__PROJECT_NAME__/$NAME/g; s/__TODAY__/$(date +%Y-%m-%d)/g" \
-  "$CLAUDE_PLUGIN_ROOT/templates/Projects/PROJECT_NAME/INDEX.md" \
-  > "$NAME/INDEX.md"
-sed "s/__PROJECT_NAME__/$NAME/g; s/__TODAY__/$(date +%Y-%m-%d)/g" \
   "$CLAUDE_PLUGIN_ROOT/templates/Projects/PROJECT_NAME/overview.md" \
   > "$NAME/overview.md"
 ```
+
+That's it — no INDEX file to create, the auto-overview will pick up the new project from its `overview.md` frontmatter.
 
 ## Auditing the vault
 
 `scripts/audit.py` does a full vault integrity scan — separate from the per-session delta check that runs in SessionEnd. It reports:
 
-- **Frontmatter issues** — notes missing required keys (`type`, `description`, `created`; plus `project` under `Projects/`).
+- **Frontmatter issues** — notes missing required keys (`type`, `description`, `created`; plus `project` under `Projects/`). README files are skipped (they're prose, not memory notes).
 - **Broken wikilinks** — `[[target]]` references that don't resolve. Resolution mirrors Obsidian: path-qualified targets try vault-root, source-relative, then path-suffix match; bare targets match by basename anywhere.
-- **Dead INDEX entries** — broken wikilinks that originate from an `INDEX.md`, surfaced separately so you can prioritize them.
-- **Orphan notes** — files with no incoming wikilink (excluding `INDEX.md` files themselves).
+- **Orphan notes** — files with no incoming wikilink (excluding `README.md` files).
+- **Duplicate basenames** — multiple notes share the same filename, making bare `[[wikilinks]]` ambiguous.
 
 ```bash
 # Markdown report to stdout

@@ -80,12 +80,14 @@ fi
 # and pipes in the prompt body are treated as literal text. Substitute the
 # placeholders with sed afterwards.
 # ---------------------------------------------------------------------------
+PLUGIN_ROOT_PATH="${CLAUDE_PLUGIN_ROOT:-}"
 REVIEW_PROMPT=$(cat <<'PROMPT_EOF' | sed \
   -e "s|__VAULT__|${VAULT}|g" \
   -e "s|__TRANSCRIPT__|${TRANSCRIPT}|g" \
   -e "s|__PROJECT_NAME__|${PROJECT_NAME}|g" \
   -e "s|__TODAY__|${TODAY}|g" \
-  -e "s|__NOW__|${NOW}|g"
+  -e "s|__NOW__|${NOW}|g" \
+  -e "s|__PLUGIN_ROOT__|${PLUGIN_ROOT_PATH}|g"
 You are doing an end-of-session memory review for the Obsidian vault at __VAULT__.
 
 Transcript: __TRANSCRIPT__
@@ -110,7 +112,11 @@ DO ALL OF THE FOLLOWING:
    Scan the transcript for items that meet ALL of these:
    - Significant: user correction, validated approach, novel fact, decision, or explicit "remember this"
    - Useful in future sessions (not ephemeral session detail like one-off command output)
-   - Not already in the vault — VERIFY by running obsidian search with keywords from the candidate, and reading any matches before deciding to write.
+   - Not already in the vault — VERIFY by running a typed search with the
+     plugin's vault CLI before writing. Use the type that matches the
+     candidate (e.g., for a candidate decision: `python3 __PLUGIN_ROOT__/scripts/_vault.py search --type decision --keywords "<keywords>" --json`).
+     Read any matches in full before deciding to write a new note. If a near-
+     duplicate exists, prefer to extend that note rather than create a new one.
 
    For each that qualifies, write a new note in the appropriate folder:
    - User correction about coding/communication style: General/Preferences/SLUG.md
@@ -122,21 +128,24 @@ DO ALL OF THE FOLLOWING:
 
    Every new note MUST have frontmatter with: type, description, created. Add project for project-scoped notes. Type is one of: preference, reference, decision, learning, tool, people.
 
-   After writing, update the relevant INDEX.md to list the new note.
+   No INDEX file maintenance is needed — the next SessionStart's auto-overview
+   picks up new notes automatically from their frontmatter.
 
 3. MODIFY existing notes ONLY when the transcript contains an explicit correction by the user — they directly state that some prior fact, instruction, or memory is wrong or outdated. Make the smallest edit that fixes the issue. Do NOT modify based on inference or implication.
 
    If the transcript merely suggests an existing note might be stale (without explicit user correction), leave the note alone and flag it in your output summary so the next session can verify.
 
-   Outside of explicit corrections, the only allowed modifications are: appending to today's journal, and updating INDEX files to list new notes.
+   Outside of explicit corrections, the only allowed modification is: appending to today's journal.
 
 4. INTEGRITY CHECK (deltas only — only the notes YOU created or modified in steps 1-3, not the whole vault):
    For each such file, verify:
    a. Frontmatter has: `type`, `description`, `created`. Files under `Projects/` also need `project`.
    b. Every `[[wikilink]]` in the body resolves. Path-qualified links (`[[Folder/Note]]`) must point at an existing file. Bare links (`[[note-name]]`) must match the basename of some note in the vault.
-   c. New notes (not journal appends) must be listed in the relevant INDEX.md — the INDEX of the folder they live in (e.g., `Projects/__PROJECT_NAME__/INDEX.md` for project notes, `General/INDEX.md` for cross-project).
 
-   Auto-fix what is unambiguous (add the missing INDEX entry, fix an obvious typo in a wikilink). For anything ambiguous, list it under "## Integrity flags" in your output and leave it. Do NOT scan or fix files outside the deltas — that is the job of the full audit script (`scripts/audit.py`).
+   Auto-fix unambiguous frontmatter or typo issues. For anything ambiguous,
+   list it under "## Integrity flags" in your output and leave it. Do NOT scan
+   or fix files outside the deltas — that is the job of the full audit script
+   (`__PLUGIN_ROOT__/scripts/audit.py`).
 
 OUTPUT FORMAT: at the end, print a short list of files created or appended, then any "## Integrity flags". No narrative.
 PROMPT_EOF
