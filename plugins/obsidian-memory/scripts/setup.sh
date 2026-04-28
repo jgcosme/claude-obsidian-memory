@@ -78,34 +78,6 @@ mkdir -p "$VAULT_PATH/General/Preferences" "$VAULT_PATH/General/People" "$VAULT_
 mkdir -p "$VAULT_PATH/Projects"
 
 # ---------------------------------------------------------------------------
-# v1.1 migration: vaults from earlier versions had hand-maintained INDEX.md
-# files. Auto-overview replaces them. Migrate idempotently.
-#   - rename root INDEX.md → README.md (if README doesn't already exist)
-#   - archive sub-INDEX files to .archive/v1.1-migration/<original-path>
-# ---------------------------------------------------------------------------
-ARCHIVE_DIR="$VAULT_PATH/.archive/v1.1-migration"
-if [ -f "$VAULT_PATH/INDEX.md" ] && [ ! -f "$VAULT_PATH/README.md" ]; then
-  mv "$VAULT_PATH/INDEX.md" "$VAULT_PATH/README.md"
-  echo "[~] migrated $VAULT_PATH/INDEX.md → $VAULT_PATH/README.md (v1.1)"
-fi
-moved_any=0
-while IFS= read -r idx; do
-  rel="${idx#"$VAULT_PATH"/}"
-  dest="$ARCHIVE_DIR/$rel"
-  mkdir -p "$(dirname "$dest")"
-  mv "$idx" "$dest"
-  echo "[~] archived $rel → .archive/v1.1-migration/$rel"
-  moved_any=1
-done < <(find "$VAULT_PATH" -type f -name 'INDEX.md' \
-  ! -path "$VAULT_PATH/.archive/*" \
-  \( -path "$VAULT_PATH/Tools/INDEX.md" \
-     -o -path "$VAULT_PATH/General/INDEX.md" \
-     -o -path "$VAULT_PATH/Projects/*/INDEX.md" \) 2>/dev/null)
-if [ "$moved_any" = "1" ]; then
-  echo "    (the auto-overview at SessionStart now replaces these. Delete the archive once you're sure nothing was lost.)"
-fi
-
-# ---------------------------------------------------------------------------
 # 4. Render templates recursively, skipping per-project templates and metadata.
 # Substitutes __TODAY__ and __VAULT_PATH__ in every rendered note.
 # ---------------------------------------------------------------------------
