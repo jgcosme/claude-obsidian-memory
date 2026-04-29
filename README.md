@@ -6,10 +6,11 @@ A Claude Code plugin that turns a markdown directory into Claude's persistent me
 
 Claude Code's per-project auto-memory (`~/.claude/projects/*/memory/`) is siloed and not editable in any UI. This plugin replaces it with a vault-backed system:
 
-- **Frontmatter as source of truth.** Every note declares `type`, `description`, `created` (and `project` when scoped). The session-start overview, retrieval gate, and audit all derive from frontmatter — nothing to hand-maintain.
+- **Transparent memory.** Nothing is hidden in a database or vector index — every fact the agent recalls is a file you can open and correct. Fixing a wrong memory is a text edit, not a prompt negotiation.
+- **Frontmatter as source of truth.** Every note declares `type`, `description`, `created` (and `project` when scoped). The plugin writes those fields automatically and derives everything else (recall, summaries, audits) from them — no index to maintain.
 - **Git-tracked.** Every memory write is a diff. Auto-commit on by default; auto-push opt-in.
 - **Obsidian-friendly, not Obsidian-required.** The vault is just markdown — search runs in pure Python. Obsidian.app adds a UI but no plugin-required functionality.
-- **Three lifecycle hooks.** SessionStart loads context, UserPromptSubmit retrieves relevant notes per turn, SessionEnd journals and writes new notes proactively (with dedup-by-search, integrity check, and auto-commit).
+- **Three lifecycle hooks.** `SessionStart` loads context, `UserPromptSubmit` retrieves relevant notes per turn, `SessionEnd` journals and writes new notes proactively (with dedup-by-search, integrity check, and auto-commit).
 
 For internals, see [HOW-IT-WORKS.md](./HOW-IT-WORKS.md).
 
@@ -35,7 +36,7 @@ Tested on macOS; Linux works with the same prerequisites.
 /reload-plugins
 ```
 
-The first time you start a Claude session after installing, SessionStart detects the missing vault and asks Claude to confirm setup with you (one consent prompt). Answer **yes** and Claude runs `setup.sh` for you, then offers to `git init` the vault so SessionEnd can auto-commit.
+The first time you start a Claude session after installing, `SessionStart` detects the missing vault and asks Claude to confirm setup with you (one consent prompt). Answer **yes** and Claude runs `setup.sh` for you, then offers to `git init` the vault so `SessionEnd` can auto-commit.
 
 To run setup manually instead — or to scaffold without starting a Claude session — invoke:
 
@@ -126,14 +127,14 @@ Edit `~/.config/claude-memory/config.env`:
 | Variable | Default | Purpose |
 |---|---|---|
 | `OBSIDIAN_VAULT_PATH` | `$HOME/Documents/Obsidian Vault` | vault path |
-| `CLAUDE_BIN` | auto-detected | `claude` binary used by SessionEnd review and the gate |
+| `CLAUDE_BIN` | auto-detected | `claude` binary used by `SessionEnd` review and the gate |
 | `OBSIDIAN_MEMORY_AUTOCOMMIT` | `true` | git commit vault changes after review |
 | `OBSIDIAN_MEMORY_AUTOPUSH` | `false` | push after auto-commit |
 | `OBSIDIAN_MEMORY_GATE_ENABLED` | `true` | retrieval gate on/off |
 | `OBSIDIAN_MEMORY_GATE_PATH_CAP` | `3` | max paths the gate injects per turn |
 | `OBSIDIAN_MEMORY_GATE_NOTE_BYTE_CAP` | `10240` | per-note size cap on gate injection |
 | `OBSIDIAN_MEMORY_DEBUG` | `false` | verbose logging |
-| `MEMORY_REVIEW_LOG` | `/tmp/claude-memory-review.log` | SessionEnd review log |
+| `MEMORY_REVIEW_LOG` | `/tmp/claude-memory-review.log` | `SessionEnd` review log |
 | `MEMORY_GATE_LOG` | `/tmp/claude-memory-gate.log` | retrieval gate log |
 | `MEMORY_LOG_MAX_BYTES` | `1048576` | rotate hook logs at this size |
 | `MEMORY_OVERVIEW_CACHE_DIR` | `/tmp/claude-memory-overview-cache` | shared overview cache (mtime-invalidated) |
@@ -156,7 +157,7 @@ The setup script `chmod 600`s the file. See [TROUBLESHOOTING.md](./TROUBLESHOOTI
 
 ## Privacy / what gets sent to the model
 
-- **SessionEnd review** sends the full transcript of the just-ended session to `claude -p`.
+- **`SessionEnd` review** sends the full transcript of the just-ended session to `claude -p`.
 - **Retrieval gate** sends each user message + the vault overview to `claude -p` per turn. Note bodies are *not* sent to the gate; only descriptions in the overview.
 - **Vault contents** may be auto-committed and (if `OBSIDIAN_MEMORY_AUTOPUSH=true`) pushed to whatever remote your vault tracks. Default is opt-in.
 
@@ -174,7 +175,7 @@ The retrieval gate adds latency to every user message because it makes a `claude
 
 Anthropic's prompt cache amortizes the static portion (overview in `--system-prompt`) across calls within a 5-min window. Disable the gate via `OBSIDIAN_MEMORY_GATE_ENABLED=false` if the latency isn't worth it.
 
-SessionEnd review and auto-commit run **in the background** — no shell wait time.
+`SessionEnd` review and auto-commit run **in the background** — no shell wait time.
 
 ## Documentation
 
