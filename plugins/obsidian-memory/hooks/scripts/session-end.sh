@@ -155,31 +155,20 @@ Vault HEAD at session start: __VAULT_HEAD_DISPLAY__
 
 Do steps 1-3 first. Step 4 (the journal) is written last so its bullets can reference everything you wrote.
 
-1. PROACTIVE NOTES — write when ALL hold:
-   - Significant: correction, decision, validated approach, novel fact, "remember this".
-   - Useful in future sessions.
-   - Not already covered. Verify with `python3 __PLUGIN_ROOT__/scripts/_vault.py --vault __VAULT__ search --type <t> --keywords <k> --json`; read matches; extend a near-duplicate rather than creating a new note.
+1. PROACTIVE NOTES — for save-worthy moments in the transcript (corrections, decisions, validated approaches, novel facts, "remember this"). Skip if not useful in future sessions, or already covered (verify via `python3 __PLUGIN_ROOT__/scripts/_vault.py --vault __VAULT__ search --type <t> --keywords <k> --json`; extend a near-duplicate rather than creating a new note).
 
-   Route each candidate (mutually exclusive):
+   Three buckets. Pick exactly one per candidate:
 
-   A. Personal / cross-project — substantive vault note:
-      style preference  → General/Preferences/<slug>.md
-      external system   → General/References/<slug>.md
-      tool reference    → Tools/<slug>.md
-      person            → General/People/<slug>.md
+   1. Personal / cross-project → vault.
+      Subfolders: General/Preferences/, General/References/, Tools/, General/People/.
 
-   B. Project-scoped (decision, gotcha, how-X-works) — classify first:
-      Q1. Team-relevant? (other engineers on the project benefit)
-      Q2. Project at __PROJECT_DIR__ has internal docs? (docs/, ADR folders, mkdocs/sphinx, CONTRIBUTING)
+   2. Project-related AND project has internal docs (docs/, ADR folders, mkdocs/sphinx, CONTRIBUTING) → reflect upstream in __PROJECT_DIR__. No vault note.
+      Allowed paths: docs/ tree, ADR folders, *.md under docs/. Never source, configs, CI, or manifests.
+      WIP guard: `git -C __PROJECT_DIR__ status --porcelain -- <target>`. Non-empty → skip and record under "## Integrity flags".
+      Else write the edit as uncommitted working-tree changes. Don't git add / commit / push / branch.
+      List each repo write under "## Project repo writes".
 
-      Q1=yes AND Q2=yes → reflect upstream only (no vault note):
-        i.   Destination inside __PROJECT_DIR__: extend an existing doc when one fits, else add a new file under the docs tree following its conventions.
-        ii.  Allowed paths: docs/ tree, ADR folders, *.md inside docs/. Never source, configs, CI, or manifests.
-        iii. Run `git -C __PROJECT_DIR__ status --porcelain -- <target>`. Non-empty → SKIP the project write (would stomp WIP); record the deferral (file, suggested location, reason) under "## Integrity flags".
-        iv.  Else write the doc edit as uncommitted working-tree changes. Do not git add / commit / push / branch.
-        v.   List each project-repo write under "## Project repo writes" in the output.
-
-      Otherwise → substantive vault note at Projects/__PROJECT_NAME__/{Decisions,Learnings}/<slug>.md.
+   3. Project-related AND no project docs → substantive vault note at Projects/__PROJECT_NAME__/{Decisions,Learnings}/<slug>.md.
 
    Frontmatter on every new vault note: type, description, created (+ project for project-scoped). type ∈ {preference, reference, decision, learning, tool, people}.
 
@@ -215,7 +204,7 @@ Do steps 1-3 first. Step 4 (the journal) is written last so its bullets can refe
 
    Each bullet that describes a write must include the path:
    - Vault writes (steps 1-2) → vault-relative path.
-   - Project-repo writes (step 1.B yes/yes route) → repo-relative path.
+   - Project-repo writes (bucket 2 from step 1) → repo-relative path.
    The journal is the cross-session anchor; paths in bullets are how future sessions find the work.
 
 OUTPUT sections (in order, omit when empty):

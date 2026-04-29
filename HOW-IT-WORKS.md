@@ -83,16 +83,13 @@ The hook returns immediately; the review runs in the background and logs to `/tm
 
 ### Routing rules
 
-When `SessionEnd` identifies a memory candidate, it routes by category:
+Three buckets:
 
-- **Personal / cross-project** (style preference, external system, tool, person)
-  → vault note in `General/Preferences|References|People` or `Tools/`.
-- **Project-scoped + team-relevant + project repo has internal docs** (docs/, ADR folders, mkdocs/sphinx, CONTRIBUTING)
-  → reflect upstream as a doc edit in the project repo (uncommitted working-tree change, WIP-guarded by `git status --porcelain` on the target). No parallel vault note — the journal entry mentions the repo-relative path, and that's the cross-session anchor.
-- **Project-scoped otherwise**
-  → substantive vault note at `Projects/<name>/{Decisions,Learnings}/`.
+1. **Personal / cross-project** → vault (`General/Preferences/`, `General/References/`, `Tools/`, `General/People/`).
+2. **Project-related AND project has internal docs** (`docs/`, ADR folders, mkdocs/sphinx, CONTRIBUTING) → reflect upstream as an uncommitted doc edit in the repo. No vault note. The journal entry mentions the repo path; that's the cross-session anchor.
+3. **Project-related AND no project docs** → substantive vault note at `Projects/<name>/{Decisions,Learnings}/`.
 
-Project-repo writes are restricted to the docs tree — never source, configs, CI, or manifests. If the target is dirty, the write is skipped and the deferral is recorded in the journal.
+Project-repo writes are restricted to the docs tree — never source, configs, CI, or manifests. WIP-guarded by `git status --porcelain` on the target; if dirty, the write is skipped and recorded under `## Integrity flags`.
 
 ## Token telemetry (`/obsidian-memory:usage`)
 

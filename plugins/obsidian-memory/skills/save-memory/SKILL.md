@@ -23,29 +23,16 @@ If a match exists, propose **extending** that note rather than creating a new on
 
 ## 2. Route the note
 
-Pick exactly one route based on what the moment is about.
+Three buckets. Pick exactly one.
 
-**Personal / cross-project:**
+1. **Personal / cross-project** → vault.
+   Pick the subfolder that fits: `General/Preferences/`, `General/References/`, `Tools/`, `General/People/`.
 
-| Moment | Path |
-|---|---|
-| Style preference ("from now on...", "always...") | `General/Preferences/<slug>.md` |
-| External system or pattern (secrets, conventions) | `General/References/<slug>.md` |
-| Tool reference (CLI, API, service) | `Tools/<slug>.md` |
-| Person | `General/People/<slug>.md` |
+2. **Project-related AND the project has internal docs** (`docs/`, ADR folders, mkdocs/sphinx, CONTRIBUTING) → reflect upstream in the repo. **No vault note.**
+   Allowed paths: `docs/` tree, ADR folders, `*.md` under `docs/`. Never source, configs, CI, or manifests. The journal entry written by `SessionEnd` will mention the repo path — that's the cross-session anchor.
+   WIP guard: run `git -C "$CLAUDE_PROJECT_DIR" status --porcelain -- <target>`. Non-empty → skip the write and tell the user where you would have written so they can revisit.
 
-**Project-scoped** (decision, gotcha, how-X-works) — answer two questions:
-
-1. **Team-relevant?** (other engineers on the project would benefit)
-2. **Does the project maintain internal docs?** (`docs/`, ADR folders, mkdocs/sphinx, CONTRIBUTING)
-
-| Q1 | Q2 | Action |
-|---|---|---|
-| yes | yes | **Reflect upstream only — no vault note.** Edit a project doc inside `$CLAUDE_PROJECT_DIR` (extend an existing one if it fits, else add a new file under the docs tree). Allowed paths: `docs/`, ADR folders, `*.md` under `docs/`. **Never** source, configs, CI, or manifests. The journal entry written by `SessionEnd` will mention the repo path; that's the cross-session anchor. Don't create a parallel vault note. |
-| yes | no  | Substantive vault note at `Projects/<name>/{Decisions,Learnings}/<slug>.md` |
-| no  | —   | Substantive vault note at `Projects/<name>/{Decisions,Learnings}/<slug>.md` |
-
-For project-doc writes (yes/yes route): run `git -C "$CLAUDE_PROJECT_DIR" status --porcelain -- <target>` first. If non-empty, **skip the write** (don't stomp WIP) and tell the user where you would have written so they can revisit.
+3. **Project-related AND no project docs** → substantive vault note at `Projects/<name>/{Decisions,Learnings}/<slug>.md`.
 
 ## 3. Frontmatter (required on every new note)
 
