@@ -172,6 +172,8 @@ Do steps 1-3 first. Step 4 (the journal) is written last so its bullets can refe
 
    Frontmatter on every new vault note: type, description, created (+ project for project-scoped). type ∈ {preference, reference, decision, learning, tool, people}.
 
+   Always wrap the `description:` value in double quotes (e.g. `description: "one-line hook"`). Descriptions often contain `:`, `[[wikilinks]]`, or `[brackets]` — unquoted, these break YAML parsing. Escape any embedded `"` as `\"`. This rule also applies when you rewrite an existing note's `description` (step 2) or the journal's day-summary `description` (step 4).
+
 2. MODIFY existing notes only on explicit user correction in the transcript. Smallest edit. Inferred staleness → flag in output, do not edit.
 
    When you extend or correct a non-journal note, check its frontmatter `description` against the new body. If the one-line summary no longer fits, rewrite it (smallest edit). The SessionStart auto-overview is built from these descriptions — stale ones mislead future sessions.

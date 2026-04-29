@@ -40,11 +40,13 @@ Three buckets. Pick exactly one.
 ```yaml
 ---
 type: <preference|reference|decision|learning|tool|people|feedback>
-description: one-line hook
+description: "one-line hook"
 created: YYYY-MM-DD
 project: <name>     # only if project-scoped
 ---
 ```
+
+Always wrap `description:` in double quotes. Descriptions often contain `:` (e.g. `"AM: did X"`), `[[wikilinks]]`, or `[brackets]` — unquoted, these break YAML parsing and silently truncate the description in the auto-overview. Escape any embedded `"` as `\"`.
 
 `type` must match the route:
 

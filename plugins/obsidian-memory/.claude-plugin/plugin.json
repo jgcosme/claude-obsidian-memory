@@ -1,7 +1,7 @@
 {
   "name": "obsidian-memory",
   "description": "Obsidian-backed persistent memory for Claude Code. SessionStart loads vault context; SessionEnd journals + writes proactive notes with auto-commit.",
-  "version": "1.5.5",
+  "version": "1.5.6",
   "author": {
     "name": "Jeff Cosme",
     "email": "jeff@thinkingmachin.es"

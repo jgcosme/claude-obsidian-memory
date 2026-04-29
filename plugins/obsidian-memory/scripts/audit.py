@@ -28,6 +28,12 @@ import sys
 from datetime import datetime
 from pathlib import Path
 
+try:
+    import yaml  # type: ignore
+    _HAS_YAML = True
+except ImportError:
+    _HAS_YAML = False
+
 # Shared module: parse_frontmatter, collect_md_files, resolve_vault, FRONTMATTER_RE
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from _vault import (  # noqa: E402
@@ -139,6 +145,17 @@ def main() -> int:
             for k in required:
                 if k not in fm:
                     fm_issues.append({"file": str(rel), "issue": f"missing `{k}`"})
+            # Strict YAML validation — _vault.parse_frontmatter is intentionally
+            # lenient (line-split on first `:`), which silently truncates values
+            # containing `: ` like "description: AM: did X". Catch those here.
+            if _HAS_YAML:
+                m = FRONTMATTER_RE.match(text)
+                if m is not None:
+                    try:
+                        yaml.safe_load(m.group(1))
+                    except yaml.YAMLError as e:
+                        msg = str(e).splitlines()[0]
+                        fm_issues.append({"file": str(rel), "issue": f"yaml parse error: {msg}"})
 
         body = FRONTMATTER_RE.sub("", text, count=1)
         for target in extract_wikilinks(body):
