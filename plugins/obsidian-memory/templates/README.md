@@ -39,8 +39,8 @@ project: <project-name>            # only for project-scoped notes
 ```
 
 The plugin builds Claude's vault overview at SessionStart by walking these
-frontmatter blocks — there are no INDEX files to maintain. Adding/renaming
-notes shows up automatically in the next session.
+frontmatter blocks. Adding/renaming notes shows up automatically in the next
+session.
 
 ## Recall
 

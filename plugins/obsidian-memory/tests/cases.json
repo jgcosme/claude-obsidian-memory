@@ -1,0 +1,51 @@
+{
+  "_comment": "Gate-prompt evaluation cases. Paths reference notes in tests/fixtures/vault/. Today's fixture date is 2026-04-29.",
+  "positive": [
+    {"msg": "remind me of the secrets pattern", "expect_any_of": ["General/References/secrets-env.md"]},
+    {"msg": "what was decided about hooks vs CLAUDE.md autoload?", "expect_any_of": ["Projects/example-project/Decisions/hooks-vs-autoload.md"]},
+    {"msg": "show me the slack tool docs", "expect_any_of": ["Tools/Slack.md"]},
+    {"msg": "how do I use the gws CLI?", "expect_any_of": ["Tools/Google Workspace.md"]},
+    {"msg": "what's the github repo for the obsidian vault?", "expect_any_of": ["Projects/example-project/References/vault-repo.md"]},
+    {"msg": "what's in my user profile note?", "expect_any_of": ["General/user.md"]},
+    {"msg": "what was that gotcha about claude -p --bare?", "expect_any_of": ["Projects/example-project/Learnings/bare-flag-kills-auth.md"]},
+    {"msg": "what's the issue with $CLAUDE_PLUGIN_ROOT in slash commands?", "expect_any_of": ["Projects/example-project/Learnings/plugin-root-not-in-shell.md"]},
+    {"msg": "what did we learn about session 1 scaffolding?", "expect_any_of": ["Projects/example-project/Learnings/session-1-scaffolding-gap.md"]},
+    {"msg": "what's the convention for importing external docs into the vault?", "expect_any_of": ["General/Preferences/vault-import-conventions.md"]},
+    {"msg": "show me yesterday's journal", "expect_any_of": ["Projects/example-project/Journal/2026-04-28.md"], "search_ok": true},
+    {"msg": "what learnings have I captured recently?", "expect_search": {"type": "learning"}, "expect_any_of": []},
+    {"msg": "what's the overview of the current project?", "expect_any_of": ["Projects/example-project/overview.md"]},
+    {"msg": "thanks! also remind me about the slack token", "expect_any_of": ["Tools/Slack.md"]},
+    {"msg": "I forgot the rule about how we organize external doc imports", "expect_any_of": ["General/Preferences/vault-import-conventions.md"]},
+    {"msg": "what's in the other-project-a project?", "expect_search": {"path_prefix": "Projects/other-project-a"}, "expect_any_of": []}
+  ],
+  "negative": [
+    {"msg": "thanks!"},
+    {"msg": "ok"},
+    {"msg": "yes"},
+    {"msg": "no, that's fine"},
+    {"msg": "fix the typo on line 12"},
+    {"msg": "how would you tune the gate prompt?"},
+    {"msg": "what's 2+2?"},
+    {"msg": "write a python function to reverse a string"},
+    {"msg": "explain how transformers work"},
+    {"msg": "what's the weather in Tokyo?"},
+    {"msg": "ls the current directory"},
+    {"msg": "go ahead"},
+    {"msg": "lol"},
+    {"msg": "actually nevermind"},
+    {"msg": "commit and push the changes"},
+    {"msg": "rename the variable foo to bar"},
+    {"msg": "what does this regex do: ^[a-z]+$"},
+    {"msg": "what did we decide about kubernetes?"},
+    {"msg": "example-project is a cool name"},
+    {"msg": "what would we decide if we needed to add auth from scratch?"},
+    {"msg": "delete the secrets-env note"},
+    {"msg": "rewrite the gate prompt to be more concise"}
+  ],
+  "edge": [
+    {"msg": "what tools do I have?", "note": "overview already lists the tools; either empty or reading a tool note is defensible"},
+    {"msg": "what projects am I working on?", "note": "overview already lists"},
+    {"msg": "show me the vault structure", "note": "meta — overview is the answer"},
+    {"msg": "the journal", "note": "vague reference"}
+  ]
+}
