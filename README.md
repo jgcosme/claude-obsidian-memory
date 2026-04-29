@@ -119,6 +119,8 @@ Edit `~/.config/claude-memory/config.env`:
 | `OBSIDIAN_MEMORY_AUTOCOMMIT` | `true` | git commit vault changes after review |
 | `OBSIDIAN_MEMORY_AUTOPUSH` | `false` | push after auto-commit |
 | `OBSIDIAN_MEMORY_GATE_ENABLED` | `true` | retrieval gate on/off |
+| `OBSIDIAN_MEMORY_REVIEW_ENABLED` | `true` | SessionEnd review on/off (auto-commit still runs when off) |
+| `OBSIDIAN_MEMORY_BOOTSTRAP_OVERVIEW` | `true` | inject vault overview into main session at SessionStart (gate keeps its own copy regardless) |
 | `OBSIDIAN_MEMORY_GATE_PATH_CAP` | `3` | max paths the gate injects per turn |
 | `OBSIDIAN_MEMORY_GATE_NOTE_BYTE_CAP` | `10240` | per-note size cap on gate injection |
 | `OBSIDIAN_MEMORY_DEBUG` | `false` | verbose logging |

@@ -20,6 +20,8 @@ else
   PLUGIN_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 fi
 GATE_ENABLED="${OBSIDIAN_MEMORY_GATE_ENABLED:-true}"
+REVIEW_ENABLED="${OBSIDIAN_MEMORY_REVIEW_ENABLED:-true}"
+BOOTSTRAP_OVERVIEW="${OBSIDIAN_MEMORY_BOOTSTRAP_OVERVIEW:-true}"
 AUTOCOMMIT="${OBSIDIAN_MEMORY_AUTOCOMMIT:-true}"
 AUTOPUSH="${OBSIDIAN_MEMORY_AUTOPUSH:-false}"
 LOG_REVIEW="${MEMORY_REVIEW_LOG:-/tmp/claude-memory-review.log}"
@@ -36,10 +38,12 @@ echo ""
 
 echo "Config:"
 if [ -f "$CONFIG_FILE" ]; then ok "config: $CONFIG_FILE"; else warn "config missing at $CONFIG_FILE (using defaults)"; fi
-echo "  • vault:       $VAULT"
-echo "  • gate:        $GATE_ENABLED"
-echo "  • autocommit:  $AUTOCOMMIT"
-echo "  • autopush:    $AUTOPUSH"
+echo "  • vault:              $VAULT"
+echo "  • gate:               $GATE_ENABLED"
+echo "  • review:             $REVIEW_ENABLED"
+echo "  • bootstrap-overview: $BOOTSTRAP_OVERVIEW"
+echo "  • autocommit:         $AUTOCOMMIT"
+echo "  • autopush:           $AUTOPUSH"
 echo ""
 
 echo "Prerequisites:"

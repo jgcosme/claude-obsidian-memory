@@ -84,6 +84,10 @@ if [ ! -d "$VAULT/Projects/$PROJECT_NAME" ]; then
   RUN_REVIEW=false
   echo "[$(date '+%Y-%m-%d %H:%M:%S')] no Projects/$PROJECT_NAME/ folder; skipping review, will still commit dirty vault state" >> "$LOG"
 fi
+if [ "${OBSIDIAN_MEMORY_REVIEW_ENABLED:-true}" != "true" ]; then
+  RUN_REVIEW=false
+  echo "[$(date '+%Y-%m-%d %H:%M:%S')] OBSIDIAN_MEMORY_REVIEW_ENABLED=false; skipping review, will still commit dirty vault state" >> "$LOG"
+fi
 
 # ---------------------------------------------------------------------------
 # Build the review prompt. `read -d ''` captures a quoted heredoc into a

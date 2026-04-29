@@ -137,17 +137,24 @@ fi
 
 # 5. Auto-generated vault overview (the load-bearing piece).
 # Goes through the shared cache helper so subsequent UserPromptSubmit calls
-# can reuse the same cache file when the vault hasn't changed.
+# can reuse the same cache file when the vault hasn't changed. We always run
+# the helper to warm the cache for the gate; OBSIDIAN_MEMORY_BOOTSTRAP_OVERVIEW
+# controls whether the overview is also injected into the main session's
+# context. Setting it to false drops ~5–15KB cache_read tokens per turn but
+# removes the main session's in-context "scan for relevance" map — the gate
+# still has its own copy and continues to work.
 OVERVIEW_HELPER="$PLUGIN_ROOT/hooks/scripts/_overview.sh"
 if [ -n "$PLUGIN_ROOT" ] && [ -x "$OVERVIEW_HELPER" ]; then
-  echo "=== VAULT OVERVIEW (auto-generated from frontmatter) ==="
   OVERVIEW_OUT=$(bash "$OVERVIEW_HELPER" "$OBSIDIAN_VAULT_PATH" "$PROJECT_NAME")
-  if [ -n "$OVERVIEW_OUT" ]; then
-    printf '%s\n' "$OVERVIEW_OUT"
-  else
-    echo "(overview generation failed — check that python3 ≥ 3.9 is available)"
+  if [ "${OBSIDIAN_MEMORY_BOOTSTRAP_OVERVIEW:-true}" = "true" ]; then
+    echo "=== VAULT OVERVIEW (auto-generated from frontmatter) ==="
+    if [ -n "$OVERVIEW_OUT" ]; then
+      printf '%s\n' "$OVERVIEW_OUT"
+    else
+      echo "(overview generation failed — check that python3 ≥ 3.9 is available)"
+    fi
+    echo ""
   fi
-  echo ""
 fi
 
 # 6. Project scaffolding prompt (only when the project has no vault folder yet).
