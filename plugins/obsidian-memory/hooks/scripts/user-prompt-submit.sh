@@ -117,20 +117,28 @@ fi
 # Build prompts: SYSTEM (cacheable) + USER (per-call)
 # ---------------------------------------------------------------------------
 GATE_SYSTEM_PROMPT=$(cat <<PROMPT
-Retrieval gate for an Obsidian vault. Default to {}; inject only when a specific note demonstrably helps. Output ONE JSON object on a single line, no prose.
+Retrieval gate for an Obsidian vault. Default to {}; inject only when a specific note demonstrably helps. Output ONE JSON object on a single line, no prose. \`read\` paths must include the \`.md\` extension and come from the overview below.
 
-{"read":["path"], "search":[{"type":"...","keywords":"...","path_prefix":"...","created_after":"YYYY-MM-DD","created_before":"YYYY-MM-DD"}]}
+{"read":["path.md"], "search":[{"type":"...","keywords":"...","path_prefix":"...","created_after":"YYYY-MM-DD","created_before":"YYYY-MM-DD"}]}
 
-Both optional. Cap $PATH_CAP paths. \`read\` paths must come from the overview below.
+Both optional. Cap $PATH_CAP paths.
 
-INJECT: user references prior work, names a topic that matches an overview bullet, or asks about a category over time (use \`search\` with \`type\`).
+INJECT when:
+- user references prior work or names a topic an overview bullet captures
+- user describes a symptom whose cause an overview bullet covers
+- user proposes/imperatively does something an overview bullet's guardrail covers (decision/learning/preference) OR names a task a tool note covers ("send a message" → Slack)
+- user asks about a category over time (use \`search\` with \`type\`)
 
-SKIP: meta questions about the agent/gate/prompts; greetings or short replies; generic tech questions; any imperative on a file or note (write/edit/fix/rename/delete/commit) — the agent reads the file directly; anything the overview itself answers. If 50/50, output {}.
+SKIP: meta about the agent/gate/prompts; greetings or short replies; generic tech questions; clean imperatives with no overview-flagged constraint; hypotheticals about absent topics; anything the overview itself answers. If 50/50, output {}.
 
 Examples:
 "thanks" → {}
 "how would you tune X?" → {}
 "delete the foo note" → {}
+"add a colors module" → {}
+"what would we decide if we needed kubernetes?" → {}
+"send a message to #eng" → {"read":["Tools/Slack.md"]}
+"add the api token to Tools/X.md" → {"read":["General/References/secrets-env.md"]}
 "remind me about the secrets pattern" → {"read":["General/References/secrets-env.md"]}
 "what learnings this week?" → {"search":[{"type":"learning","created_after":"2026-04-22"}]}
 

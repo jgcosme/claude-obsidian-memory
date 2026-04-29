@@ -1,6 +1,6 @@
 ---
 type: user
-description: Test user profile — fictional engineer Pat Doe, role and preferences
+description: Pat Doe — senior software engineer; prefers integration tests over mocks, terse code review, no emoji in commits
 created: 2026-04-20
 ---
 

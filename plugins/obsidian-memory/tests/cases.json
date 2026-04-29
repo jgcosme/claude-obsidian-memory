@@ -16,7 +16,24 @@
     {"msg": "what's the overview of the current project?", "expect_any_of": ["Projects/example-project/overview.md"]},
     {"msg": "thanks! also remind me about the slack token", "expect_any_of": ["Tools/Slack.md"]},
     {"msg": "I forgot the rule about how we organize external doc imports", "expect_any_of": ["General/Preferences/vault-import-conventions.md"]},
-    {"msg": "what's in the other-project-a project?", "expect_search": {"path_prefix": "Projects/other-project-a"}, "expect_any_of": []}
+    {"msg": "what's in the other-project-a project?", "expect_search": {"path_prefix": "Projects/other-project-a"}, "expect_any_of": []},
+
+    {"msg": "the gate keeps failing with 'Not logged in' on subprocess calls", "expect_any_of": ["Projects/example-project/Learnings/bare-flag-kills-auth.md"], "_category": "diagnosis"},
+    {"msg": "the auto-overview is missing notes for the project I just scaffolded", "expect_any_of": ["Projects/example-project/Learnings/session-1-scaffolding-gap.md"], "_category": "diagnosis"},
+
+    {"msg": "send a message to #engineering that the deploy is done", "expect_any_of": ["Tools/Slack.md"], "_category": "tool-via-task"},
+    {"msg": "put a 30-minute hold on my calendar tomorrow at 2pm", "expect_any_of": ["Tools/Google Workspace.md"], "_category": "tool-via-task"},
+
+    {"msg": "this hook setup feels like a lot of moving parts — couldn't we just put the index in CLAUDE.md?", "expect_any_of": ["Projects/example-project/Decisions/hooks-vs-autoload.md"], "_category": "rejustification"},
+    {"msg": "what's the best way to bootstrap memory in a Claude Code session for this project?", "expect_any_of": ["Projects/example-project/Decisions/hooks-vs-autoload.md"], "_category": "best-way"},
+
+    {"msg": "where are we on example-project?", "expect_any_of": ["Projects/example-project/overview.md", "Projects/example-project/Journal/2026-04-29.md"], "_category": "project-state"},
+
+    {"msg": "write tests for the new gate handler", "expect_any_of": ["General/user.md"], "_category": "implicit-pref"},
+
+    {"msg": "add the slack token directly to Tools/Slack.md", "expect_any_of": ["General/References/secrets-env.md", "Tools/Slack.md"], "_category": "imperative-guardrail"},
+    {"msg": "add --bare to the gate subprocess for cleaner logs", "expect_any_of": ["Projects/example-project/Learnings/bare-flag-kills-auth.md"], "_category": "imperative-guardrail"},
+    {"msg": "import everything from /Users/me/old-project/docs into the vault", "expect_any_of": ["General/Preferences/vault-import-conventions.md"], "_category": "imperative-guardrail"}
   ],
   "negative": [
     {"msg": "thanks!"},
@@ -40,7 +57,10 @@
     {"msg": "example-project is a cool name"},
     {"msg": "what would we decide if we needed to add auth from scratch?"},
     {"msg": "delete the secrets-env note"},
-    {"msg": "rewrite the gate prompt to be more concise"}
+    {"msg": "rewrite the gate prompt to be more concise"},
+
+    {"msg": "add a colors module to the project"},
+    {"msg": "draft a function that returns the current date"}
   ],
   "edge": [
     {"msg": "what tools do I have?", "note": "overview already lists the tools; either empty or reading a tool note is defensible"},
