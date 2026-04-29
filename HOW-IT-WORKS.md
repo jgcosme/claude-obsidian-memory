@@ -39,13 +39,13 @@ Total injection is typically 3–8 KB depending on vault size.
 `hooks/scripts/session-end.sh` backgrounds a `claude -p` subprocess that:
 
 1. Reads the transcript.
-2. Writes a journal entry to `Projects/<project>/Journal/YYYY-MM-DD.md` (appends a `## Session HH:MM` section if the file already exists for today). Skipped if `Projects/<project>/` doesn't exist.
+2. Writes a journal entry to `Projects/<project>/Journal/YYYY-MM-DD.md` (appends a `## Session HH:MM` section if the file already exists for today, and rewrites the frontmatter `description` to summarize the full day). Skipped if `Projects/<project>/` doesn't exist.
 3. Writes new notes proactively when ALL of:
    - the information is significant (correction, validated approach, decision, novel fact),
    - it will be useful in future sessions,
    - and no existing note already covers it (verified by typed search before writing).
-4. Modifies existing notes only on **explicit user correction** in the transcript — not inference. Inferred staleness is flagged for the next session.
-5. Runs a delta integrity check on its own writes (frontmatter complete, wikilinks resolve).
+4. Modifies existing notes only on **explicit user correction** in the transcript — not inference. Inferred staleness is flagged for the next session. When a non-journal note is extended or corrected, its frontmatter `description` is rewritten if the one-line summary no longer fits — this keeps the SessionStart auto-overview accurate.
+5. Runs a delta integrity check on its own writes (frontmatter complete, wikilinks resolve), plus a `description`-vs-body check on any non-journal note linked from today's journal entry.
 6. Independently `git add -A && git commit`s any vault changes when `OBSIDIAN_MEMORY_AUTOCOMMIT=true` (default). Push is opt-in (`OBSIDIAN_MEMORY_AUTOPUSH=true`). Wrapped in `flock` to prevent concurrent sessions racing.
 
 The hook returns immediately; the review runs in the background and logs to `/tmp/claude-memory-review.log`.

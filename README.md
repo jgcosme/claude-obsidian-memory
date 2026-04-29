@@ -117,6 +117,8 @@ python3 "$CLAUDE_PLUGIN_ROOT/scripts/audit.py"
 
 Exits non-zero on issues; suitable for a pre-push hook or weekly cron. Does not auto-fix.
 
+The `/obsidian-memory:audit` slash command wraps this and summarizes the output. Pass `--deep` to add an LLM pass that flags `description`-vs-body drift across the vault — useful when notes have been heavily extended since their description was set. Lists candidates with suggested replacements; does not auto-fix.
+
 ## Configuration
 
 Edit `~/.config/claude-memory/config.env`:

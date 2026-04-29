@@ -97,7 +97,7 @@ cat <<INSTRUCTIONS
 === OBSIDIAN MEMORY ===
 
 Vault: $OBSIDIAN_VAULT_PATH
-Index: the auto-overview below — regenerated each session from frontmatter (no INDEX files).
+Index: the auto-overview below — regenerated each session from frontmatter.
 
 RECALL — read by path or query:
   Read tool                     "$OBSIDIAN_VAULT_PATH/<path>"

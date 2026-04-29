@@ -102,7 +102,7 @@ Date / time: __TODAY__ __NOW__
 1. JOURNAL — always.
    Path: Projects/__PROJECT_NAME__/Journal/__TODAY__.md
    New file: frontmatter (type=journal, description=<one-line day summary>, project=__PROJECT_NAME__, created=__TODAY__) + "## Session __NOW__" + 3-6 bullets covering work, decisions, learnings.
-   Existing file: append a new "## Session __NOW__" section. Do not edit content above.
+   Existing file: append a new "## Session __NOW__" section. Do not edit prior session bodies. You MAY (and should) rewrite the frontmatter `description` to cover the full day across all sessions now present — the original was a one-line day summary written when only the first session existed, and goes stale as the day grows.
 
 2. PROACTIVE NOTES — write when ALL hold:
    - Significant: correction, decision, validated approach, novel fact, "remember this".
@@ -135,10 +135,13 @@ Date / time: __TODAY__ __NOW__
 
 3. MODIFY existing notes only on explicit user correction in the transcript. Smallest edit. Inferred staleness → flag in output, do not edit. Otherwise the only modification allowed is appending to today's journal.
 
-4. INTEGRITY (deltas from steps 1-3 only):
+   Whenever you modify or extend a non-journal note (step 2 near-duplicate extension or step 3 correction), check its frontmatter `description` against the new body. If the one-line summary no longer fits, rewrite it. The auto-overview shown at SessionStart is built from these descriptions — stale ones mislead future sessions.
+
+4. INTEGRITY (deltas from steps 1-3 only, plus journal-linked notes):
    - Frontmatter complete (type, description, created; + project under Projects/).
    - Every [[wikilink]] resolves: path-qualified to a file; bare matches a vault basename.
-   Auto-fix unambiguous issues. List ambiguous ones under "## Integrity flags". Do not scan files outside the deltas (audit.py handles the full vault).
+   - For each non-journal vault note referenced in today's journal entry written in step 1 (any [[wikilink]] or vault-relative path mentioned in the bullets you just wrote), re-read it and judge whether its frontmatter `description` still summarizes the body. If drift, rewrite `description` (smallest edit) and add the path to the delta list.
+   Auto-fix unambiguous issues. List ambiguous ones under "## Integrity flags". Do not scan files outside the deltas + journal-linked set.
 
 OUTPUT: list of vault paths created/appended, then "## Project repo writes" (paths in __PROJECT_DIR__), then "## Integrity flags". No narrative.
 PROMPT_EOF
