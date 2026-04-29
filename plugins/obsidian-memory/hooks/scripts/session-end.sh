@@ -69,6 +69,31 @@ if [ -z "$TRANSCRIPT" ] || [ ! -f "$TRANSCRIPT" ]; then
   exit 0
 fi
 
+# Slim the transcript for the reviewer: strip tool_use / tool_result blocks
+# and keep only user messages + assistant text + a one-line tool-use summary
+# per assistant turn. Cuts review token cost ~95% on real sessions because
+# tool_result bodies (file reads, command output, search results) dominate
+# transcript size and aren't signal for save-worthy detection.
+# OBSIDIAN_MEMORY_SLIM_TRANSCRIPT=false reverts to the raw transcript.
+PLUGIN_ROOT_PATH="${CLAUDE_PLUGIN_ROOT:-}"
+SLIM_HELPER="$PLUGIN_ROOT_PATH/scripts/_slim_transcript.py"
+SLIM_TRANSCRIPT=""
+if [ "${OBSIDIAN_MEMORY_SLIM_TRANSCRIPT:-true}" = "true" ] && [ -f "$SLIM_HELPER" ]; then
+  SLIM_TRANSCRIPT=$(mktemp -t claude-memory-slim.XXXXXX 2>/dev/null || echo "")
+  if [ -n "$SLIM_TRANSCRIPT" ]; then
+    if python3 "$SLIM_HELPER" "$TRANSCRIPT" -o "$SLIM_TRANSCRIPT" 2>>"$LOG"; then
+      bytes_in=$(wc -c < "$TRANSCRIPT" 2>/dev/null | tr -d ' ' || echo 0)
+      bytes_out=$(wc -c < "$SLIM_TRANSCRIPT" 2>/dev/null | tr -d ' ' || echo 0)
+      echo "[$(date '+%Y-%m-%d %H:%M:%S')] slimmed transcript: ${bytes_in} → ${bytes_out} bytes" >> "$LOG"
+      TRANSCRIPT="$SLIM_TRANSCRIPT"
+    else
+      echo "[$(date '+%Y-%m-%d %H:%M:%S')] slim helper failed; falling back to raw transcript" >> "$LOG"
+      rm -f "$SLIM_TRANSCRIPT"
+      SLIM_TRANSCRIPT=""
+    fi
+  fi
+fi
+
 # Skip if vault missing (plugin not yet set up)
 if [ ! -d "$VAULT" ]; then
   echo "[$(date '+%Y-%m-%d %H:%M:%S')] skipped: vault not found at '$VAULT'" >> "$LOG"
@@ -181,6 +206,7 @@ nohup bash -c '
   AUTOPUSH='"$AUTOPUSH"'
   SESSION_ID='"$(printf %q "$SESSION_ID")"'
   USAGE_LOGGER='"$(printf %q "$USAGE_LOGGER")"'
+  SLIM_TRANSCRIPT='"$(printf %q "$SLIM_TRANSCRIPT")"'
 
   if [ "$RUN_REVIEW" = "true" ]; then
     echo "[$(ts)] starting review for project=$PROJECT_NAME transcript=$TRANSCRIPT" >> "$LOG"
@@ -246,6 +272,10 @@ nohup bash -c '
     else
       echo "[$(ts)] vault clean — nothing to commit" >> "$LOG"
     fi
+  fi
+
+  if [ -n "$SLIM_TRANSCRIPT" ] && [ -f "$SLIM_TRANSCRIPT" ]; then
+    rm -f "$SLIM_TRANSCRIPT"
   fi
 ' >/dev/null 2>&1 &
 

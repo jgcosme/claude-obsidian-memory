@@ -72,6 +72,8 @@ The hook returns immediately; the review runs in the background and logs to `/tm
 
 **Disabling:** set `OBSIDIAN_MEMORY_REVIEW_ENABLED=false` in `~/.config/claude-memory/config.env` to skip the review entirely. Auto-commit of any vault writes from the in-session save-memory skill still fires. This is the single biggest token-cost lever — review reads the full transcript, which scales with session length.
 
+**Transcript pre-filter:** before launching the reviewer, `session-end.sh` runs `scripts/_slim_transcript.py` to strip `tool_use` and `tool_result` content from the transcript and emit a compact dialogue version (user messages + assistant text + a one-line "used: Read, Bash, …" summary per assistant turn). On real sessions this reduces transcript size 94–96% (a 2.3MB transcript becomes ~95KB) while preserving the signal the reviewer acts on (decisions, corrections, validated approaches, novel facts). The reviewer reads the slim version via `Read` and writes notes from it; tool-call bodies that don't drive memory writes never enter the review's context. Disable via `OBSIDIAN_MEMORY_SLIM_TRANSCRIPT=false` to fall back to the raw transcript.
+
 ### Routing rules
 
 When `SessionEnd` identifies a memory candidate, it routes by category:
