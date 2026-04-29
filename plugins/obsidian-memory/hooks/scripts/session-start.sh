@@ -124,22 +124,7 @@ RECALL — read by path or query:
   Python search CLI             python3 "$PLUGIN_ROOT/scripts/_vault.py" search --type <t> --keywords <k> --path-prefix <p> [--created-after YYYY-MM-DD]
   Obsidian search (if running)  obsidian search query="[type:decision] keywords"
 
-REMEMBER — write a note only when ALL hold:
-  - Significant: correction, decision, validated approach, novel fact, "remember this"
-  - Not already covered (search the vault first)
-  - Useful in future sessions
-
-ROUTE before writing. Two questions:
-  1. Team-relevant (architecture, gotchas, runbooks, conventions) or personal/cross-project?
-  2. Does the project maintain internal docs (docs/, ADRs, mkdocs/sphinx, CONTRIBUTING)?
-
-  team-relevant + has docs   → propose a repo doc edit; on user approval, apply it and add a thin-pointer vault note in Projects/<name>/{Decisions,Learnings}/
-  team-relevant + no docs    → substantive vault note in Projects/<name>/{Decisions,Learnings}/
-  personal / cross-project   → substantive vault note in General/ or Projects/<name>/
-
-Frontmatter required (except README): type, description, created (+ \`project\` for project-scoped).
-UPDATE wrong/outdated notes. Verify paths and function names before recommending — they drift.
-Do not write to ~/.claude/projects/*/memory/ (disabled in favor of this vault).
+REMEMBER — invoke the \`save-memory\` skill to write notes. It handles when-to-save, routing, and frontmatter. Verify paths and function names before recommending — they drift.
 
 INSTRUCTIONS
 

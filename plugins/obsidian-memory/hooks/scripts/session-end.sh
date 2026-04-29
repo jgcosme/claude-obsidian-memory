@@ -105,10 +105,10 @@ Date / time: __TODAY__ __NOW__
    New file: frontmatter (type=journal, description=<one-line day summary>, project=__PROJECT_NAME__, created=__TODAY__) + "## Session __NOW__" + 3-6 bullets covering work, decisions, learnings.
    Existing file: append a new "## Session __NOW__" section. Do not edit prior session bodies. You MAY (and should) rewrite the frontmatter `description` to cover the full day across all sessions now present — the original was a one-line day summary written when only the first session existed, and goes stale as the day grows.
 
-2. PROACTIVE NOTES — backstop mode. The in-session `save-memory` skill may have already captured many save-worthy moments mid-session (its writes will be in the transcript and on disk). Your job here is to catch what the skill missed — especially quiet validations ("yeah, that was the right call"), patterns visible only across multiple turns, and novel facts the user dropped without ceremony. Write when ALL hold:
+2. PROACTIVE NOTES — write when ALL hold:
    - Significant: correction, decision, validated approach, novel fact, "remember this".
    - Useful in future sessions.
-   - Not already covered. Verify with `python3 __PLUGIN_ROOT__/scripts/_vault.py search --type <t> --keywords <k> --json`; read matches; extend a near-duplicate rather than creating a new note. This dedup rule is what prevents you from re-writing notes the skill already captured this session.
+   - Not already covered. Verify with `python3 __PLUGIN_ROOT__/scripts/_vault.py search --type <t> --keywords <k> --json`; read matches; extend a near-duplicate rather than creating a new note.
 
    Route each candidate (mutually exclusive):
 
