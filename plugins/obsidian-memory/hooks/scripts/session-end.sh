@@ -133,6 +133,17 @@ fi
 # it). Placeholders are substituted with sed afterwards.
 # ---------------------------------------------------------------------------
 PLUGIN_ROOT_PATH="${CLAUDE_PLUGIN_ROOT:-}"
+
+# Precompute the vault-changes command and HEAD display so the prompt stays
+# free of shell conditionals. Single-quote vault/script paths to handle
+# spaces; vault paths don't contain single quotes in practice.
+VAULT_HEAD_DISPLAY="${VAULT_HEAD:-(none)}"
+if [ -n "$VAULT_HEAD" ]; then
+  VAULT_CHANGES_CMD="python3 '$PLUGIN_ROOT_PATH/scripts/_vault.py' --vault '$VAULT' vault-changes --base-sha $VAULT_HEAD"
+else
+  VAULT_CHANGES_CMD="python3 '$PLUGIN_ROOT_PATH/scripts/_vault.py' --vault '$VAULT' vault-changes"
+fi
+
 read -r -d '' REVIEW_PROMPT_TMPL <<'PROMPT_EOF' || true
 End-of-session memory review.
 
@@ -140,19 +151,14 @@ Vault:        __VAULT__
 Transcript:   __TRANSCRIPT__
 Project:      __PROJECT_NAME__ (at __PROJECT_DIR__)
 Date / time:  __TODAY__ __NOW__
-Vault HEAD at session start: __VAULT_HEAD__   (empty = unknown; fall back to working-tree diff vs HEAD)
+Vault HEAD at session start: __VAULT_HEAD_DISPLAY__
 
-1. JOURNAL — always.
-   Path: Projects/__PROJECT_NAME__/Journal/__TODAY__.md
-   New file: frontmatter (type=journal, description=<one-line day summary>, project=__PROJECT_NAME__, created=__TODAY__) + "## Session __NOW__" + 3-6 bullets covering work, decisions, learnings.
-   Existing file: append a new "## Session __NOW__" section. Do not edit prior session bodies. You MAY (and should) rewrite the frontmatter `description` to cover the full day across all sessions now present — the original was a one-line day summary written when only the first session existed, and goes stale as the day grows.
+Do steps 1-3 first. Step 4 (the journal) is written last so its bullets can reference everything you wrote.
 
-   When a bullet describes a project-repo doc edit (a write inside __PROJECT_DIR__), include the repo-relative path explicitly (e.g., "Fixed docs/eda/erd.md to match the notebook example"). Same when a bullet describes a substantive vault write — include the vault-relative path. The journal is the cross-session anchor for repo-doc decisions; paths in bullets are how future sessions find them.
-
-2. PROACTIVE NOTES — write when ALL hold:
+1. PROACTIVE NOTES — write when ALL hold:
    - Significant: correction, decision, validated approach, novel fact, "remember this".
    - Useful in future sessions.
-   - Not already covered. Verify with `python3 __PLUGIN_ROOT__/scripts/_vault.py search --type <t> --keywords <k> --json`; read matches; extend a near-duplicate rather than creating a new note.
+   - Not already covered. Verify with `python3 __PLUGIN_ROOT__/scripts/_vault.py --vault __VAULT__ search --type <t> --keywords <k> --json`; read matches; extend a near-duplicate rather than creating a new note.
 
    Route each candidate (mutually exclusive):
 
@@ -169,38 +175,48 @@ Vault HEAD at session start: __VAULT_HEAD__   (empty = unknown; fall back to wor
       Q1=yes AND Q2=yes → reflect upstream only (no vault note):
         i.   Destination inside __PROJECT_DIR__: extend an existing doc when one fits, else add a new file under the docs tree following its conventions.
         ii.  Allowed paths: docs/ tree, ADR folders, *.md inside docs/. Never source, configs, CI, or manifests.
-        iii. Run `git -C __PROJECT_DIR__ status --porcelain -- <target>`. Non-empty → SKIP the project write (would stomp WIP); append a one-liner to the journal noting the deferral (file, suggested location, reason).
+        iii. Run `git -C __PROJECT_DIR__ status --porcelain -- <target>`. Non-empty → SKIP the project write (would stomp WIP); record the deferral (file, suggested location, reason) under "## Integrity flags".
         iv.  Else write the doc edit as uncommitted working-tree changes. Do not git add / commit / push / branch.
-        v.   Make sure the journal bullet for this session names the repo-relative path of the edit — that is the cross-session anchor.
-        vi.  List each project-repo write under "## Project repo writes" in the output.
+        v.   List each project-repo write under "## Project repo writes" in the output.
 
       Otherwise → substantive vault note at Projects/__PROJECT_NAME__/{Decisions,Learnings}/<slug>.md.
 
    Frontmatter on every new vault note: type, description, created (+ project for project-scoped). type ∈ {preference, reference, decision, learning, tool, people}.
 
-3. MODIFY existing notes only on explicit user correction in the transcript. Smallest edit. Inferred staleness → flag in output, do not edit. Otherwise the only modification allowed is appending to today's journal.
+2. MODIFY existing notes only on explicit user correction in the transcript. Smallest edit. Inferred staleness → flag in output, do not edit.
 
-   Whenever you modify or extend a non-journal note (step 2 near-duplicate extension or step 3 correction), check its frontmatter `description` against the new body. If the one-line summary no longer fits, rewrite it. The auto-overview shown at SessionStart is built from these descriptions — stale ones mislead future sessions.
+   When you extend or correct a non-journal note, check its frontmatter `description` against the new body. If the one-line summary no longer fits, rewrite it (smallest edit). The SessionStart auto-overview is built from these descriptions — stale ones mislead future sessions.
 
-4. INTEGRITY — operates on:
-   (a) vault notes touched in steps 1-3 above
-   (b) non-journal vault notes referenced (wikilinks/paths) in today's journal entry
+3. INTEGRITY — operates on:
+   (a) vault notes touched in steps 1-2 above
+   (b) non-journal vault notes referenced (wikilinks/paths) in any prior-session entry of today's journal
    (c) vault *.md files changed since the last commit (for backlink reconciliation on renames/deletes)
 
-   Enumerate (c) via:
-     python3 __PLUGIN_ROOT__/scripts/_vault.py vault-changes \
-       $( [ -n "__VAULT_HEAD__" ] && echo --base-sha __VAULT_HEAD__ )
+   Enumerate (c):
+     __VAULT_CHANGES_CMD__
 
    Per-source checks:
 
    - (a) + (b): frontmatter completeness (type, description, created; + project under Projects/); every [[wikilink]] resolves; description-vs-body drift (rewrite description on drift, smallest edit).
 
    - (c) Vault file changes — BACKLINK RECONCILIATION:
-       * RENAMED (old → new) → `python3 __PLUGIN_ROOT__/scripts/_vault.py incoming-wikilinks --target <old>` to find every note linking to the OLD path. Auto-rewrite each occurrence to the NEW path (smallest edit; preserve any |alias text). For bare basename links, prefer the new basename. List rewrites under "## Backlink rewrites".
-       * DELETED → `incoming-wikilinks --target <deleted-path>` to find broken backlinks. List under "## Broken backlinks (target deleted)". DO NOT auto-fix — deletion may be intentional or may be a rename the diff couldn't infer.
+       * RENAMED (old → new) → `python3 __PLUGIN_ROOT__/scripts/_vault.py --vault __VAULT__ incoming-wikilinks --target <old>` to find every note linking to the OLD path. Auto-rewrite each occurrence to the NEW path (smallest edit; preserve any |alias text). For bare basename links, prefer the new basename. List rewrites under "## Backlink rewrites".
+       * DELETED → same command on the deleted path to find broken backlinks. List under "## Broken backlinks (target deleted)". DO NOT auto-fix — deletion may be intentional or may be a rename the diff couldn't infer.
        * ADDED / MODIFIED → no backlink action needed.
 
    Auto-fix unambiguous issues (description drift, backlink-rename). List ambiguous and non-fixable items in their dedicated sections.
+
+4. JOURNAL — always, written LAST.
+   Path: Projects/__PROJECT_NAME__/Journal/__TODAY__.md
+
+   New file: frontmatter (type=journal, description=<one-line day summary>, project=__PROJECT_NAME__, created=__TODAY__) + "## Session __NOW__" + 3-6 bullets covering work, decisions, learnings.
+
+   Existing file: append a "## Session __NOW__" section. Do not edit any prior content (earlier sessions today, earlier days). You MAY (and should) rewrite the frontmatter `description` to summarize the full day now that more sessions exist.
+
+   Each bullet that describes a write must include the path:
+   - Vault writes (steps 1-2) → vault-relative path.
+   - Project-repo writes (step 1.B yes/yes route) → repo-relative path.
+   The journal is the cross-session anchor; paths in bullets are how future sessions find the work.
 
 OUTPUT sections (in order, omit when empty):
   ## Vault writes              (paths created/appended)
@@ -220,7 +236,8 @@ REVIEW_PROMPT=$(printf '%s' "$REVIEW_PROMPT_TMPL" | sed \
   -e "s|__TODAY__|${TODAY}|g" \
   -e "s|__NOW__|${NOW}|g" \
   -e "s|__PLUGIN_ROOT__|${PLUGIN_ROOT_PATH}|g" \
-  -e "s|__VAULT_HEAD__|${VAULT_HEAD}|g")
+  -e "s|__VAULT_HEAD_DISPLAY__|${VAULT_HEAD_DISPLAY}|g" \
+  -e "s|__VAULT_CHANGES_CMD__|${VAULT_CHANGES_CMD}|g")
 
 export REVIEW_PROMPT
 
