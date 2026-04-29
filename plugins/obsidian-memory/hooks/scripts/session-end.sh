@@ -5,6 +5,15 @@
 set -u
 
 # ---------------------------------------------------------------------------
+# Recursion guard: the review subprocess and the gate subprocess both spawn
+# `claude -p`, which fires its own SessionEnd on shutdown. Without this guard
+# we'd loop forever.
+# ---------------------------------------------------------------------------
+if [ -n "${CLAUDE_MEMORY_REVIEW:-}" ] || [ -n "${CLAUDE_MEMORY_GATE:-}" ]; then
+  exit 0
+fi
+
+# ---------------------------------------------------------------------------
 # Config
 # ---------------------------------------------------------------------------
 CONFIG_FILE="${HOME}/.config/claude-memory/config.env"
@@ -162,9 +171,11 @@ nohup bash -c '
 
   if [ "$RUN_REVIEW" = "true" ]; then
     echo "[$(ts)] starting review for project=$PROJECT_NAME transcript=$TRANSCRIPT" >> "$LOG"
+    # Note: --bare disables OAuth/keychain auth (see `claude --help`). We rely
+    # on the recursion-guard env vars (CLAUDE_MEMORY_REVIEW=1) plus the
+    # early-exit checks at the top of the hook scripts to prevent recursion.
     CLAUDE_MEMORY_REVIEW=1 "$CLAUDE_BIN" -p "$REVIEW_PROMPT" \
       --tools "Read,Write,Edit,Bash" \
-      --bare \
       >> "$LOG" 2>&1
     echo "[$(ts)] review complete (exit=$?)" >> "$LOG"
   fi

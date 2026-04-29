@@ -22,7 +22,7 @@ Total injection is typically 3–8 KB depending on vault size.
 `hooks/scripts/user-prompt-submit.sh` runs on every user message before it reaches the main session:
 
 1. Builds the auto-generated vault overview via the shared `_overview.sh` helper. The helper caches the overview to `/tmp/claude-memory-overview-cache/<sha1(vault|project)>.txt` and invalidates it when any `*.md` file in the vault is newer than the cache file (`find -newer`, fast-path early exit). SessionStart populates the cache, so the first user turn already hits a warm cache.
-2. Spawns `claude -p --bare --tools "" --system-prompt <overview>` with the user's message as the prompt. `--bare` skips nested hooks; `--tools ""` disables all tools — the gate is pure text in / JSON out.
+2. Spawns `claude -p --tools "" --system-prompt <overview>` with the user's message as the prompt. `--tools ""` disables all tools — the gate is pure text in / JSON out. The recursion-guard env vars (`CLAUDE_MEMORY_GATE=1`, `CLAUDE_MEMORY_REVIEW=1`) prevent the subprocess's own SessionStart/SessionEnd/UserPromptSubmit hooks from re-firing. We don't use `--bare` because that flag disables OAuth/keychain auth — see `claude --help`.
 3. The gate inherits the user's default model. Anthropic's prompt cache reuses the overview (in `--system-prompt`) across calls within the 5-min TTL.
 4. The gate returns JSON: `{"read": [...], "search": [{type, keywords, path_prefix, created_after, created_before}]}`.
 5. The hook executes any typed searches via `_vault.py search`, merges read paths + search hits, validates each path exists in the vault and isn't a path-traversal attempt, deduplicates against the per-session injected list, and caps at `OBSIDIAN_MEMORY_GATE_PATH_CAP` (default 3).

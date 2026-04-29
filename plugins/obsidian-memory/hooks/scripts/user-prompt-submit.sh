@@ -149,11 +149,15 @@ JSON only:"
 # ---------------------------------------------------------------------------
 # Call the gate
 # ---------------------------------------------------------------------------
+# Note: --bare disables OAuth/keychain auth (see `claude --help`). We instead
+# rely on the recursion-guard env vars (CLAUDE_MEMORY_GATE=1,
+# CLAUDE_MEMORY_REVIEW=1) plus the early-exit checks at the top of the hook
+# scripts to prevent the subprocess's own SessionStart/SessionEnd/
+# UserPromptSubmit from re-firing.
 GATE_OUTPUT=$(CLAUDE_MEMORY_GATE=1 CLAUDE_MEMORY_REVIEW=1 \
   "$CLAUDE_BIN" -p "$GATE_USER_PROMPT" \
     --system-prompt "$GATE_SYSTEM_PROMPT" \
     --tools "" \
-    --bare \
     2>>"$LOG")
 GATE_EXIT=$?
 

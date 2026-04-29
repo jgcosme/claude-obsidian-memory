@@ -5,6 +5,15 @@
 set -u
 
 # ---------------------------------------------------------------------------
+# Recursion guard: the review and gate subprocesses spawn `claude -p`, which
+# fires its own SessionStart. We don't want to inject the vault overview into
+# their tiny system-prompt context.
+# ---------------------------------------------------------------------------
+if [ -n "${CLAUDE_MEMORY_REVIEW:-}" ] || [ -n "${CLAUDE_MEMORY_GATE:-}" ]; then
+  exit 0
+fi
+
+# ---------------------------------------------------------------------------
 # Config: load from ~/.config/claude-memory/config.env if present, else use defaults.
 # ---------------------------------------------------------------------------
 CONFIG_FILE="${HOME}/.config/claude-memory/config.env"
