@@ -191,6 +191,7 @@ nohup bash -c '
     if [ -n "$REVIEW_OUT" ]; then
       CLAUDE_MEMORY_REVIEW=1 "$CLAUDE_BIN" -p "$REVIEW_PROMPT" \
         --tools "Read,Write,Edit,Bash" \
+        --strict-mcp-config \
         --output-format json \
         > "$REVIEW_OUT" 2>> "$LOG"
       review_exit=$?
@@ -208,6 +209,7 @@ nohup bash -c '
     else
       CLAUDE_MEMORY_REVIEW=1 "$CLAUDE_BIN" -p "$REVIEW_PROMPT" \
         --tools "Read,Write,Edit,Bash" \
+        --strict-mcp-config \
         >> "$LOG" 2>&1
       echo "[$(ts)] review complete (exit=$?, no telemetry — mktemp failed)" >> "$LOG"
     fi

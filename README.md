@@ -186,13 +186,13 @@ Anthropic's prompt cache amortizes the static portion (overview in `--system-pro
 
 `SessionEnd` review and auto-commit run **in the background** — no shell wait time.
 
-When the gate decides to inject vault notes for a turn, it prints a single status line so you can see retrieval at work:
+When the gate decides to inject vault notes for a turn, you see a status line so you can see retrieval at work:
 
 ```text
-[obsidian-memory] Obsidian search found 2 document matches: Tools/Slack.md, General/References/secrets-env.md
+[obsidian-memory] vault → Tools/Slack.md, General/References/secrets-env.md
 ```
 
-Bold cyan on stderr (terminal-visible) and a plain copy on stdout (so the agent's context shows it too).
+The line goes to the official `systemMessage` channel via the Claude Code hooks spec (the user-visible status channel) plus a bold-cyan stderr fallback for TUI states where `systemMessage` is clobbered by redraws.
 
 ## Token telemetry
 

@@ -171,6 +171,7 @@ GATE_RAW=$(CLAUDE_MEMORY_GATE=1 CLAUDE_MEMORY_REVIEW=1 \
   "$CLAUDE_BIN" -p "$GATE_USER_PROMPT" \
     --system-prompt "$GATE_SYSTEM_PROMPT" \
     --tools "" \
+    --strict-mcp-config \
     --output-format json \
     2>>"$LOG")
 GATE_EXIT=$?
@@ -370,21 +371,22 @@ if [ "$INJECTED" -gt 0 ]; then
     if [ -z "$joined" ]; then joined="$p"; else joined="$joined, $p"; fi
   done
 
-  # Plain line on stdout — agent sees this in its injected context, and it
-  # also appears in the persisted-output preview the user sees in the UI.
-  echo ""
-  echo "[obsidian-memory] Obsidian search found $INJECTED document match$([ "$INJECTED" -eq 1 ] || echo es): $joined"
+  user_msg="vault → $joined"
 
-  # ANSI-colored line on stderr — visible directly in the user's terminal.
-  # Bold cyan, distinct from error red.
-  printf '\033[1;36m[obsidian-memory]\033[0m \033[36mObsidian search found %d document match%s:\033[0m %s\n' \
-    "$INJECTED" "$([ "$INJECTED" -eq 1 ] || echo es)" "$joined" >&2
+  # Build additionalContext payload from the injected notes
+  additional_context=$(printf '\n=== VAULT CONTEXT (auto-retrieved by memory gate) ===\n%s\n\n=== END VAULT CONTEXT ===\n' "$(cat "$TMP")")
 
-  echo ""
-  echo "=== VAULT CONTEXT (auto-retrieved by memory gate) ==="
-  cat "$TMP"
-  echo ""
-  echo "=== END VAULT CONTEXT ==="
+  # Emit JSON hook output: systemMessage shown to user, additionalContext injected to Claude.
+  # systemMessage is the official user-visible channel (anthropics/claude-code hooks spec).
+  jq -n \
+    --arg msg "$user_msg" \
+    --arg ctx "$additional_context" \
+    '{systemMessage: $msg, hookSpecificOutput: {hookEventName: "UserPromptSubmit", additionalContext: $ctx}}'
+
+  # Belt-and-suspenders: also write a colored line to stderr in case the
+  # systemMessage channel is clobbered by TUI redraws (see anthropics/claude-code#12653).
+  printf '\033[1;36m[obsidian-memory]\033[0m \033[36m%s\033[0m\n' "$user_msg" >&2
+
   echo "[$(ts)] gate: injected $INJECTED notes ($joined)" >> "$LOG"
 
   # Record injected-context size for /obsidian-memory:usage.
