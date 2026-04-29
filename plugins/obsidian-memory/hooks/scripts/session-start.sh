@@ -107,16 +107,13 @@ TODAY=$(date +%Y-%m-%d)
 PROJECT_VAULT_DIR="$OBSIDIAN_VAULT_PATH/Projects/$PROJECT_NAME"
 TEMPLATE_DIR="$PLUGIN_ROOT/templates/Projects/PROJECT_NAME"
 
-# Record HEAD SHAs at session start so SessionEnd can diff-scope pointer +
-# backlink reconciliation to "what changed during this session" — including
-# mid-session commits, which working-tree-only diff would miss.
+# Record vault HEAD SHA so SessionEnd can diff-scope backlink reconciliation
+# to "what changed during this session" — including mid-session commits,
+# which working-tree-only diff would miss.
 SESSION_STATE_DIR="${MEMORY_SESSION_STATE_DIR:-/tmp/claude-memory-session}"
 mkdir -p "$SESSION_STATE_DIR" 2>/dev/null || true
 if [ -n "$SESSION_ID" ]; then
   SAFE_SID=$(echo "$SESSION_ID" | tr -c 'A-Za-z0-9._-' '_')
-  if [ -d "$PROJECT_DIR/.git" ]; then
-    git -C "$PROJECT_DIR" rev-parse HEAD > "$SESSION_STATE_DIR/$SAFE_SID.project_head" 2>/dev/null || true
-  fi
   if [ -d "$OBSIDIAN_VAULT_PATH/.git" ]; then
     git -C "$OBSIDIAN_VAULT_PATH" rev-parse HEAD > "$SESSION_STATE_DIR/$SAFE_SID.vault_head" 2>/dev/null || true
   fi
@@ -181,35 +178,25 @@ cwd: $PROJECT_DIR. No Projects/$PROJECT_NAME/ folder in the vault yet.
 
 Ask once: "Create memory scaffolding for project '$PROJECT_NAME'? (y/n)"
   NO  → no project folder, no project-scoped notes this session. General/ and Tools/ writes are fine.
-  YES → scaffold + prefill from evidence in $PROJECT_DIR.
+  YES → scaffold + populate overview.md from evidence in $PROJECT_DIR.
 
 1. Folders + base overview:
      mkdir -p "$PROJECT_VAULT_DIR"/{Decisions,Learnings,Research,References,Journal}
      sed -e 's|__PROJECT_NAME__|$PROJECT_NAME|g' -e 's|__TODAY__|$TODAY|g' \\
        "$TEMPLATE_DIR/overview.md" > "$PROJECT_VAULT_DIR/overview.md"
 
-2. Inspect $PROJECT_DIR. Read top-level docs (README, ARCHITECTURE, CONTRIBUTING, CHANGELOG), package manifests, ADR folders, runbooks, design docs, RFCs, /docs, build/CI config. Skip source and vendored deps.
+2. Inspect $PROJECT_DIR to populate overview.md only. Read top-level docs (README, ARCHITECTURE, CONTRIBUTING), package manifests, /docs entry points — enough to fill the overview's curated sections. Skip source, vendored deps, generated files. The goal is a stable conceptual summary, not a doc index.
    Repo metadata: \`git -C "$PROJECT_DIR" remote get-url origin\`, \`git -C "$PROJECT_DIR" branch --show-current\`.
 
-3. Populate overview.md. Keep section headings (## What it is, ## Goals, ## Current branch / focus, ## Stakeholders, ## Notes). Cite sources inline. Leave sections empty when no evidence — do not invent.
+3. Populate overview.md. Keep section headings (## What it is, ## Goals, ## Current branch / focus, ## Stakeholders, ## Notes). Cite sources inline. Leave sections empty when no evidence — do not invent. Keep it short; a concise overview that stays accurate beats a comprehensive one that drifts.
 
-4. Seed subfolders with thin pointers (1-3 sentence summary + relative source path). Skip README.md, auto-generated, vendored, and license files.
-     References/  entry-point pointers (architecture, API specs, getting-started, contributing)
-     Decisions/   ADRs and design choices with rationale
-     Learnings/   runbooks, troubleshooting, postmortems
-     Research/    design docs, RFCs, options comparisons
+4. Leave Decisions/, Learnings/, Research/, References/, Journal/ empty. They fill organically:
+   - Journal/ — SessionEnd writes one entry per day.
+   - Decisions/, Learnings/, Research/, References/ — save-memory writes here when significant moments happen in-session.
 
-   Frontmatter:
-     ---
-     type: reference | decision | learning | research
-     description: <one-line>
-     project: $PROJECT_NAME
-     created: $TODAY
-     ---
+   Do NOT bulk-import or mirror repo docs into these folders. Repo docs stay in the repo; Claude greps them when needed. Each vault note represents a curated memory moment, not a copy.
 
-   Journal/ stays empty (SessionEnd populates).
-
-5. Summarize files created with their sources, then address the original user request.
+5. Summarize what was created (folders + overview only), then address the original user request.
 EOF
 fi
 } | { if [ -n "$USAGE_TMP" ]; then tee "$USAGE_TMP"; else cat; fi; }

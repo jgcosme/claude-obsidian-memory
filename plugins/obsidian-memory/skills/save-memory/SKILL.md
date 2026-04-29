@@ -41,7 +41,7 @@ Pick exactly one route based on what the moment is about.
 
 | Q1 | Q2 | Action |
 |---|---|---|
-| yes | yes | **Reflect upstream**: edit a project doc inside `$CLAUDE_PROJECT_DIR` (extend an existing one if it fits, else add a new file under the docs tree). Allowed paths: `docs/`, ADR folders, `*.md` under `docs/`. **Never** source, configs, CI, or manifests. Also write a thin-pointer vault note (1–3 sentence summary + relative path) at `Projects/<name>/{Decisions,Learnings}/<slug>.md` with `source: <repo-relative path>` in the frontmatter — the audit and SessionEnd reconciliation steps key off this field. |
+| yes | yes | **Reflect upstream only — no vault note.** Edit a project doc inside `$CLAUDE_PROJECT_DIR` (extend an existing one if it fits, else add a new file under the docs tree). Allowed paths: `docs/`, ADR folders, `*.md` under `docs/`. **Never** source, configs, CI, or manifests. The journal entry written by `SessionEnd` will mention the repo path; that's the cross-session anchor. Don't create a parallel vault note. |
 | yes | no  | Substantive vault note at `Projects/<name>/{Decisions,Learnings}/<slug>.md` |
 | no  | —   | Substantive vault note at `Projects/<name>/{Decisions,Learnings}/<slug>.md` |
 
@@ -55,7 +55,6 @@ type: <preference|reference|decision|learning|tool|people|feedback>
 description: one-line hook
 created: YYYY-MM-DD
 project: <name>     # only if project-scoped
-source: <repo-relative path>   # only on thin-pointer notes that mirror a project doc
 ---
 ```
 
