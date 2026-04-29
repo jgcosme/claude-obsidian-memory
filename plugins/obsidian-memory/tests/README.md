@@ -47,15 +47,53 @@ Reports land at `report-current-<mode>.md` so they don't clobber the baseline.
 
 **As of writing:** `tools-and-general` cuts overview size ~60% but recall drops ~45 pts on the fixture suite. `tools-only` is worse. The descriptions in the overview are how the gate matches symptoms/imperatives to the right note — stripping them costs real recall. Cheaper wins are likely elsewhere (skip-on-trivial, truncated descriptions). Modes are kept for future re-evaluation; production (`hooks/scripts/_overview.sh`) calls without `--mode` and gets `full`.
 
+## Write-trigger evaluation
+
+`run_write_eval.py` benchmarks a candidate "should I save this as a memory note?" prompt against `cases-write.json`. Used to compare hook-mode (SessionEnd review) against skill-mode (the `save-memory` skill description) on the same fixture set.
+
+### Run
+
+```bash
+# Hook-mode prompt (matches the proactive-notes clause in session-end.sh)
+python3 tests/run_write_eval.py tests/prompts/write-hook.txt --tag hook
+
+# Skill-mode prompt (matches the save-memory skill description)
+python3 tests/run_write_eval.py tests/prompts/write-skill.txt --tag skill
+```
+
+Reports land at `tests/prompts/report-write-<tag>.md`. Each run is ~21 calls (~$0.03–0.10).
+
+### Fixture cases
+
+`cases-write.json` is a deliberately small set of single-turn user messages — 8 positive (corrections, preferences, novel facts, "remember this") and 13 negative (greetings, refactors, generic questions). Single-turn means both modes see exactly the same input, no transcript-context advantage for the hook.
+
+### Comparison vs gate eval
+
+The two harnesses are **independent and non-overlapping**:
+
+| | `run_gate_eval.py` | `run_write_eval.py` |
+|---|---|---|
+| Cases file | `cases.json` | `cases-write.json` |
+| Question | "what to retrieve?" | "should I save?" |
+| Output shape | `{"read": [...], "search": [...]}` | `{"save": bool, "kind": ...}` |
+| Reports | `report-<tag>.md` | `report-write-<tag>.md` |
+
+Both are gitignored at the report level (`tests/.gitignore: report-*.md`).
+
 ### Layout
 
 ```
 tests/
 ├── README.md
-├── run_gate_eval.py         # harness
-├── cases.json               # 16 positive + 22 negative + 4 edge
+├── run_gate_eval.py         # retrieval harness
+├── run_write_eval.py        # write-trigger harness
+├── cases.json               # 16 positive + 22 negative + 4 edge (retrieval)
+├── cases-write.json         # 8 positive + 13 negative (write-trigger)
 ├── prompts/
-│   └── current.txt          # mirrors the prompt in user-prompt-submit.sh
+│   ├── current.txt          # mirrors gate prompt in user-prompt-submit.sh
+│   ├── skill-style.txt      # alt: skill-style retrieval (eval-only, not shipped)
+│   ├── write-hook.txt       # mirrors session-end.sh proactive-notes clause
+│   └── write-skill.txt      # mirrors skills/save-memory/SKILL.md description
 └── fixtures/
     └── vault/               # synthetic vault the gate sees
 ```

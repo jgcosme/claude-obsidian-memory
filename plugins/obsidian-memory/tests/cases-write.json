@@ -1,0 +1,28 @@
+{
+  "_comment": "Write-trigger evaluation cases. Each is a snippet of a recent user message in a session. expect_save=true means the save-memory skill should fire OR the SessionEnd review should write a note. expect_save=false means it should NOT.",
+  "positive": [
+    {"msg": "from now on don't use mocks in integration tests — we got burned last quarter when mocked tests passed but the prod migration failed", "kind": "feedback"},
+    {"msg": "remember: the GROUP_ID for our slack workspace is T0123456ABC", "kind": "reference"},
+    {"msg": "always prefer Sonnet over Haiku for the gate — Haiku misses the guardrail categories", "kind": "preference"},
+    {"msg": "we decided against using cron for the cleanup job — queue worker instead, after the Q1 incident", "kind": "decision"},
+    {"msg": "yeah the bundled-PR approach was the right call here, splitting would have been churn", "kind": "feedback"},
+    {"msg": "important detail I keep forgetting: the gws CLI uses jeffcosme@thinkingmachin.es as the default account", "kind": "reference"},
+    {"msg": "just learned that --strict-mcp-config drops gate token use by ~73%, save this", "kind": "learning"},
+    {"msg": "stop summarizing what you just did at the end of every response — I can read the diff", "kind": "feedback"}
+  ],
+  "negative": [
+    {"msg": "thanks!"},
+    {"msg": "yes"},
+    {"msg": "ok go ahead"},
+    {"msg": "fix the typo on line 12"},
+    {"msg": "rename foo to bar"},
+    {"msg": "what's 2+2?"},
+    {"msg": "ls the current directory"},
+    {"msg": "rewrite this function with better naming"},
+    {"msg": "actually nevermind"},
+    {"msg": "lol"},
+    {"msg": "commit and push the changes"},
+    {"msg": "explain how transformers work"},
+    {"msg": "write a python function to reverse a string"}
+  ]
+}
