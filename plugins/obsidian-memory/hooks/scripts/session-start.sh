@@ -107,6 +107,21 @@ TODAY=$(date +%Y-%m-%d)
 PROJECT_VAULT_DIR="$OBSIDIAN_VAULT_PATH/Projects/$PROJECT_NAME"
 TEMPLATE_DIR="$PLUGIN_ROOT/templates/Projects/PROJECT_NAME"
 
+# Record HEAD SHAs at session start so SessionEnd can diff-scope pointer +
+# backlink reconciliation to "what changed during this session" — including
+# mid-session commits, which working-tree-only diff would miss.
+SESSION_STATE_DIR="${MEMORY_SESSION_STATE_DIR:-/tmp/claude-memory-session}"
+mkdir -p "$SESSION_STATE_DIR" 2>/dev/null || true
+if [ -n "$SESSION_ID" ]; then
+  SAFE_SID=$(echo "$SESSION_ID" | tr -c 'A-Za-z0-9._-' '_')
+  if [ -d "$PROJECT_DIR/.git" ]; then
+    git -C "$PROJECT_DIR" rev-parse HEAD > "$SESSION_STATE_DIR/$SAFE_SID.project_head" 2>/dev/null || true
+  fi
+  if [ -d "$OBSIDIAN_VAULT_PATH/.git" ]; then
+    git -C "$OBSIDIAN_VAULT_PATH" rev-parse HEAD > "$SESSION_STATE_DIR/$SAFE_SID.vault_head" 2>/dev/null || true
+  fi
+fi
+
 # 3. Emit memory bootstrap as injected context.
 #    Wrapped in { ... } | tee so we can record the total bytes injected for
 #    /obsidian-memory:usage. tee is reliable here (vs. process substitution)

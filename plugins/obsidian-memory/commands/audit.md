@@ -1,5 +1,5 @@
 ---
-description: Run a full vault integrity audit (frontmatter, broken wikilinks, orphans, duplicate basenames). Pass --deep to also flag description-vs-body drift via an LLM pass.
+description: Run a full vault integrity audit (frontmatter, broken wikilinks, orphans, duplicate basenames, repo-pointer drift). Pass --deep to also flag description-vs-body drift via an LLM pass.
 ---
 
 Arguments: $ARGUMENTS
@@ -12,7 +12,12 @@ Run the deterministic audit script. This works whether or not `$CLAUDE_PLUGIN_RO
 python3 "${CLAUDE_PLUGIN_ROOT:-$(ls -d ~/.claude/plugins/cache/jgcosme-plugins/obsidian-memory/*/ 2>/dev/null | tail -1 | sed 's:/$::')}/scripts/audit.py"
 ```
 
-If the script reports issues, group them by category and call out the highest-impact ones first (broken wikilinks > missing frontmatter > orphans > duplicate basenames). For each issue, suggest the smallest fix — auto-fixes aren't applied, so the user has to act.
+The script reports vault-wide checks and — when run from inside a project that has a corresponding `Projects/<cwd-basename>/` folder in the vault — also a repo-pointer audit:
+
+- **Vault-wide (always):** frontmatter completeness, broken `[[wikilinks]]`, orphan notes, duplicate basenames.
+- **Repo-pointer (when the project matches):** vault notes whose `source:` no longer exists in the repo (broken pointer sources), and repo `*.md` files with no vault pointer (unreferenced repo docs). Boilerplate filenames (`LICENSE*`, `CHANGELOG.md`, `SECURITY.md`, `CODE_OF_CONDUCT.md`, PR/ISSUE templates) and top-level dotfile dirs (`.github/`, `.cursor/`, `.vscode/`, `.devcontainer/`, …) are filtered out automatically. Untracked-but-not-gitignored docs are included.
+
+If the script reports issues, group them by category and call out the highest-impact ones first (broken wikilinks > broken pointer sources > missing frontmatter > unreferenced repo docs > orphans > duplicate basenames). For each issue, suggest the smallest fix — auto-fixes aren't applied, so the user has to act.
 
 If the audit comes back clean (exit 0, no issues), say so plainly.
 

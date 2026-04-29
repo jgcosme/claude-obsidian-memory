@@ -27,6 +27,7 @@ from pathlib import Path
 from typing import Iterable
 
 FRONTMATTER_RE = re.compile(r"^﻿?---\s*\r?\n(.*?)\r?\n---\s*\r?\n", re.DOTALL)
+WIKILINK_RE = re.compile(r"\[\[([^\]]+)\]\]")
 SKIP_DIRS = {".git", ".obsidian", ".trash", "node_modules", ".archive"}
 
 
@@ -313,6 +314,162 @@ def overview(vault: Path, project: str | None = None, mode: str = "full") -> str
 
 
 # ---------------------------------------------------------------------------
+# Vault git change detection + incoming wikilink scan (for backlink reconciliation)
+# ---------------------------------------------------------------------------
+def _vault_consume_namestatus(out: str, result: dict) -> None:
+    tokens = [t for t in out.split("\0") if t]
+    i = 0
+    while i < len(tokens):
+        status = tokens[i]; i += 1
+        if status.startswith("R") or status.startswith("C"):
+            if i + 1 >= len(tokens):
+                break
+            old = tokens[i].strip(); i += 1
+            new = tokens[i].strip(); i += 1
+            if status.startswith("R"):
+                result["renamed"].append([old, new])
+            else:
+                result["added"].append(new)
+        else:
+            if i >= len(tokens):
+                break
+            p = tokens[i].strip(); i += 1
+            if status == "A":
+                result["added"].append(p)
+            elif status == "M":
+                result["modified"].append(p)
+            elif status == "D":
+                result["deleted"].append(p)
+
+
+def vault_md_changes(vault: Path, base_sha: str | None = None) -> dict:
+    """Return *.md changes in the vault between base_sha (or HEAD) and current.
+
+    Includes uncommitted working tree + untracked. Returns {added, modified,
+    deleted, renamed[old,new]}. Skips paths under SKIP_DIRS.
+    """
+    import subprocess as _sp
+    vault = Path(vault).resolve()
+    result: dict = {"added": [], "modified": [], "deleted": [], "renamed": []}
+
+    if not (vault / ".git").exists():
+        return result
+
+    if base_sha:
+        try:
+            out = _sp.run(
+                ["git", "-C", str(vault), "diff", "--name-status", "-z", "-M",
+                 base_sha, "HEAD", "--", "*.md"],
+                capture_output=True, text=True, timeout=15,
+            )
+            if out.returncode == 0:
+                _vault_consume_namestatus(out.stdout, result)
+        except (FileNotFoundError, _sp.TimeoutExpired):
+            pass
+
+    try:
+        out = _sp.run(
+            ["git", "-C", str(vault), "diff", "--name-status", "-z", "-M",
+             "HEAD", "--", "*.md"],
+            capture_output=True, text=True, timeout=15,
+        )
+        if out.returncode == 0:
+            _vault_consume_namestatus(out.stdout, result)
+    except (FileNotFoundError, _sp.TimeoutExpired):
+        pass
+
+    try:
+        out = _sp.run(
+            ["git", "-C", str(vault), "ls-files", "--others", "--exclude-standard",
+             "-z", "--", "*.md"],
+            capture_output=True, text=True, timeout=15,
+        )
+        if out.returncode == 0:
+            for p in out.stdout.split("\0"):
+                if p:
+                    result["added"].append(p)
+    except (FileNotFoundError, _sp.TimeoutExpired):
+        pass
+
+    def _keep(p: str) -> bool:
+        if not p:
+            return False
+        for skip in SKIP_DIRS:
+            if p == skip or p.startswith(skip + "/") or f"/{skip}/" in p:
+                return False
+        return True
+
+    for k in ("added", "modified", "deleted"):
+        result[k] = sorted({p for p in result[k] if _keep(p)})
+    deduped: list = []
+    seen: set = set()
+    for pair in result["renamed"]:
+        if not _keep(pair[0]) and not _keep(pair[1]):
+            continue
+        t = (pair[0], pair[1])
+        if t not in seen:
+            seen.add(t)
+            deduped.append(pair)
+    result["renamed"] = deduped
+    return result
+
+
+def incoming_wikilinks(vault: Path, target_relpath: str) -> list[dict]:
+    """Find every note that links to `target_relpath` via [[wikilink]].
+
+    Matches both path-qualified links (vault-relative or path-suffix) and bare
+    basename links (when the target's basename is unambiguous in the vault).
+
+    Returns list of {source, raw_link, kind} where kind ∈ {path-qualified, bare}.
+    """
+    vault = Path(vault).resolve()
+    target = target_relpath.replace("\\", "/").strip().lstrip("./").rstrip("/")
+    if not target.endswith(".md"):
+        target_md = f"{target}.md"
+    else:
+        target_md = target
+    target_stem = Path(target_md).stem
+
+    md_files = collect_md_files(vault)
+    basename_counts: dict[str, int] = {}
+    for f in md_files:
+        basename_counts[f.stem] = basename_counts.get(f.stem, 0) + 1
+
+    results: list[dict] = []
+    for f in md_files:
+        try:
+            text = f.read_text(encoding="utf-8")
+        except UnicodeDecodeError:
+            continue
+        body = FRONTMATTER_RE.sub("", text, count=1) if parse_frontmatter(text) else text
+        for m in WIKILINK_RE.finditer(body):
+            raw = m.group(1)
+            link = raw.split("|", 1)[0].strip().split("#", 1)[0].strip().split("^", 1)[0].strip()
+            if not link:
+                continue
+            link_norm = link.replace("\\", "/").lstrip("./").rstrip("/")
+            link_md = link_norm if link_norm.endswith(".md") else f"{link_norm}.md"
+            kind: str | None = None
+            if "/" in link_norm:
+                if link_md == target_md:
+                    kind = "path-qualified"
+                elif link_md.endswith("/" + target_md) or target_md.endswith("/" + link_md):
+                    kind = "path-qualified"
+            else:
+                # bare basename: only attribute as incoming if the target basename
+                # is unambiguous in the vault (else we can't tell which note it meant)
+                if Path(link_md).stem == target_stem and basename_counts.get(target_stem, 0) == 1:
+                    kind = "bare"
+            if kind:
+                results.append({
+                    "source": str(f.relative_to(vault)),
+                    "raw_link": raw,
+                    "kind": kind,
+                })
+    return results
+
+
+# ---------------------------------------------------------------------------
 # CLI
 # ---------------------------------------------------------------------------
 def _cmd_search(args: argparse.Namespace) -> int:
@@ -349,6 +506,24 @@ def _cmd_overview(args: argparse.Namespace) -> int:
     return 0
 
 
+def _cmd_vault_changes(args: argparse.Namespace) -> int:
+    vault = resolve_vault(args.vault)
+    if not vault.is_dir():
+        print(f"vault not found at: {vault}", file=sys.stderr)
+        return 1
+    print(json.dumps(vault_md_changes(vault, base_sha=args.base_sha), indent=2))
+    return 0
+
+
+def _cmd_incoming_wikilinks(args: argparse.Namespace) -> int:
+    vault = resolve_vault(args.vault)
+    if not vault.is_dir():
+        print(f"vault not found at: {vault}", file=sys.stderr)
+        return 1
+    print(json.dumps(incoming_wikilinks(vault, args.target), indent=2))
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--vault", help="vault path override")
@@ -369,6 +544,16 @@ def main(argv: list[str] | None = None) -> int:
     op.add_argument("--mode", choices=["full", "tools-and-general", "tools-only"], default="full",
                     help="overview detail level (default: full)")
     op.set_defaults(func=_cmd_overview)
+
+    cp = sub.add_parser("vault-changes",
+                        help="emit JSON of *.md changes since base SHA (or HEAD), incl. working tree + untracked")
+    cp.add_argument("--base-sha", help="git SHA to diff against (default: HEAD)")
+    cp.set_defaults(func=_cmd_vault_changes)
+
+    ip = sub.add_parser("incoming-wikilinks",
+                        help="find notes linking to TARGET via [[wikilink]] (path-qualified or unambiguous bare basename)")
+    ip.add_argument("--target", required=True, help="vault-relative path of the target note (e.g., Projects/foo/bar.md)")
+    ip.set_defaults(func=_cmd_incoming_wikilinks)
 
     args = ap.parse_args(argv)
     return args.func(args)

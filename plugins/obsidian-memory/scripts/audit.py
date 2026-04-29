@@ -8,12 +8,17 @@ Reports:
 - Duplicate basenames (multiple notes share the same filename, making bare
   [[wikilinks]] ambiguous — Obsidian picks the closest one, but it's worth
   knowing about).
+- Broken pointer sources (vault notes whose `source:` no longer exists in the
+  current project repo) — only when run inside a project that has a vault folder.
+- Repo docs without vault pointers (project *.md files with no pointer in
+  Projects/<name>/) — same condition.
 
 Requires Python 3.9+.
 
 Usage:
   python3 scripts/audit.py                   # print markdown report to stdout
   python3 scripts/audit.py --vault PATH      # override vault path
+  python3 scripts/audit.py --project-dir P   # override project root (default: $CLAUDE_PROJECT_DIR or cwd)
   python3 scripts/audit.py --json            # machine-readable output
 
 Vault path resolution: --vault flag > $OBSIDIAN_VAULT_PATH > ~/.config/claude-memory/config.env > ~/Documents/Obsidian Vault
@@ -23,6 +28,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import re
 import sys
 from datetime import datetime
@@ -35,6 +41,11 @@ from _vault import (  # noqa: E402
     collect_md_files,
     parse_frontmatter,
     resolve_vault,
+)
+from _repo_docs import (  # noqa: E402
+    list_repo_docs,
+    pointer_index,
+    resolve_project_root,
 )
 
 WIKILINK_RE = re.compile(r"\[\[([^\]]+)\]\]")
@@ -99,6 +110,7 @@ def resolve_wikilink(
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--vault", help="path to Obsidian vault (overrides config)")
+    ap.add_argument("--project-dir", help="path inside a project repo (default: $CLAUDE_PROJECT_DIR or cwd)")
     ap.add_argument("--json", action="store_true", help="emit JSON instead of markdown")
     args = ap.parse_args()
 
@@ -106,6 +118,18 @@ def main() -> int:
     if not vault.is_dir():
         print(f"vault not found at: {vault}", file=sys.stderr)
         return 1
+
+    # Auto-detect project root and matching vault folder. Silently skip the
+    # repo-pointer audit if no Projects/<name>/ folder is found — the rest of
+    # the audit still runs as a vault-only check.
+    project_dir_input = args.project_dir or os.environ.get("CLAUDE_PROJECT_DIR") or os.getcwd()
+    project_root: Path | None = resolve_project_root(project_dir_input)
+    project_name: str | None = project_root.name if project_root else None
+    audit_repo = bool(
+        project_root
+        and project_name
+        and (vault / "Projects" / project_name).is_dir()
+    )
 
     md_files = collect_md_files(vault)
 
@@ -164,8 +188,25 @@ def main() -> int:
                 "paths": [str(p.relative_to(vault)) for p in paths],
             })
 
+    # Repo-pointer audit (project-aware)
+    broken_pointer_sources: list[dict] = []
+    unreferenced_repo_docs: list[str] = []
+    if audit_repo:
+        repo_docs = list_repo_docs(project_root)
+        ptrs = pointer_index(vault, project_name)  # source_path -> [pointer_relpaths]
+        for source_path, pointer_paths in sorted(ptrs.items()):
+            if source_path not in repo_docs:
+                for ptr in pointer_paths:
+                    broken_pointer_sources.append({
+                        "pointer": ptr,
+                        "source": source_path,
+                    })
+        for doc in sorted(repo_docs):
+            if doc not in ptrs:
+                unreferenced_repo_docs.append(doc)
+
     if args.json:
-        print(json.dumps({
+        out_obj: dict = {
             "vault": str(vault),
             "generated": datetime.now().isoformat(timespec="seconds"),
             "counts": {
@@ -174,12 +215,24 @@ def main() -> int:
                 "broken_wikilinks": len(broken_links),
                 "orphan_notes": len(orphans),
                 "duplicate_basenames": len(duplicate_basenames),
+                "broken_pointer_sources": len(broken_pointer_sources),
+                "unreferenced_repo_docs": len(unreferenced_repo_docs),
             },
             "frontmatter_issues": fm_issues,
             "broken_wikilinks": broken_links,
             "orphan_notes": orphans,
             "duplicate_basenames": duplicate_basenames,
-        }, indent=2))
+            "broken_pointer_sources": broken_pointer_sources,
+            "unreferenced_repo_docs": unreferenced_repo_docs,
+        }
+        if audit_repo:
+            out_obj["project"] = {
+                "name": project_name,
+                "root": str(project_root),
+            }
+        else:
+            out_obj["project"] = None
+        print(json.dumps(out_obj, indent=2))
         return 0
 
     print("# Vault Audit Report\n")
@@ -221,14 +274,42 @@ def main() -> int:
         print("_(none)_")
     print()
 
+    if audit_repo:
+        print(f"## Repo-pointer audit (project: `{project_name}` at `{project_root}`)\n")
+
+        print("### Broken pointer sources (vault `source:` no longer in repo)\n")
+        if broken_pointer_sources:
+            for it in broken_pointer_sources:
+                print(f"- `{it['pointer']}` → `{it['source']}` _(missing)_")
+        else:
+            print("_(none)_")
+        print()
+
+        print("### Repo docs without vault pointers\n")
+        if unreferenced_repo_docs:
+            for p in unreferenced_repo_docs:
+                print(f"- `{p}`")
+        else:
+            print("_(none)_")
+        print()
+    else:
+        print("## Repo-pointer audit\n")
+        print("_(skipped — no `Projects/<cwd-basename>/` folder found in the vault)_\n")
+
     print("## Summary")
     print(f"- Files scanned: {len(md_files)}")
     print(f"- Frontmatter issues: {len(fm_issues)}")
     print(f"- Broken wikilinks: {len(broken_links)}")
     print(f"- Orphan notes: {len(orphans)}")
     print(f"- Duplicate basenames: {len(duplicate_basenames)}")
+    if audit_repo:
+        print(f"- Broken pointer sources: {len(broken_pointer_sources)}")
+        print(f"- Repo docs without pointers: {len(unreferenced_repo_docs)}")
 
-    has_issues = bool(fm_issues or broken_links or orphans or duplicate_basenames)
+    has_issues = bool(
+        fm_issues or broken_links or orphans or duplicate_basenames
+        or broken_pointer_sources or unreferenced_repo_docs
+    )
     return 1 if has_issues else 0
 
 

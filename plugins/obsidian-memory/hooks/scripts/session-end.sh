@@ -63,6 +63,21 @@ PROJECT_NAME=$(basename "$PROJECT_DIR")
 TODAY=$(date +%Y-%m-%d)
 NOW=$(date +%H:%M)
 
+# Load HEAD SHAs recorded at SessionStart so the review can scope diff-based
+# checks (pointer reconciliation + backlink reconciliation) to what actually
+# changed during this session. Empty values are fine — the review prompt
+# falls back to working-tree-only diff in that case.
+SESSION_STATE_DIR="${MEMORY_SESSION_STATE_DIR:-/tmp/claude-memory-session}"
+PROJECT_HEAD=""
+VAULT_HEAD=""
+if [ -n "$SESSION_ID" ]; then
+  SAFE_SID=$(echo "$SESSION_ID" | tr -c 'A-Za-z0-9._-' '_')
+  PROJECT_HEAD_FILE="$SESSION_STATE_DIR/$SAFE_SID.project_head"
+  VAULT_HEAD_FILE="$SESSION_STATE_DIR/$SAFE_SID.vault_head"
+  [ -f "$PROJECT_HEAD_FILE" ] && PROJECT_HEAD=$(cat "$PROJECT_HEAD_FILE" 2>/dev/null || true)
+  [ -f "$VAULT_HEAD_FILE" ]   && VAULT_HEAD=$(cat "$VAULT_HEAD_FILE" 2>/dev/null || true)
+fi
+
 # Defensive: skip if no transcript available
 if [ -z "$TRANSCRIPT" ] || [ ! -f "$TRANSCRIPT" ]; then
   echo "[$(date '+%Y-%m-%d %H:%M:%S')] skipped: no transcript at '$TRANSCRIPT'" >> "$LOG"
@@ -124,10 +139,12 @@ PLUGIN_ROOT_PATH="${CLAUDE_PLUGIN_ROOT:-}"
 read -r -d '' REVIEW_PROMPT_TMPL <<'PROMPT_EOF' || true
 End-of-session memory review.
 
-Vault:       __VAULT__
-Transcript:  __TRANSCRIPT__
-Project:     __PROJECT_NAME__ (at __PROJECT_DIR__)
-Date / time: __TODAY__ __NOW__
+Vault:        __VAULT__
+Transcript:   __TRANSCRIPT__
+Project:      __PROJECT_NAME__ (at __PROJECT_DIR__)
+Date / time:  __TODAY__ __NOW__
+Project HEAD at session start: __PROJECT_HEAD__   (empty = unknown; fall back to working-tree diff vs HEAD)
+Vault HEAD at session start:   __VAULT_HEAD__     (empty = unknown; fall back to working-tree diff vs HEAD)
 
 1. JOURNAL — always.
    Path: Projects/__PROJECT_NAME__/Journal/__TODAY__.md
@@ -156,24 +173,66 @@ Date / time: __TODAY__ __NOW__
         ii.  Allowed paths: docs/ tree, ADR folders, *.md inside docs/. Never source, configs, CI, or manifests.
         iii. Run `git -C __PROJECT_DIR__ status --porcelain -- <target>`. Non-empty → SKIP the project write (would stomp WIP); append a one-liner to the journal noting the deferral (file, suggested location, reason).
         iv.  Else write the doc edit as uncommitted working-tree changes. Do not git add / commit / push / branch.
-        v.   Also write a thin-pointer vault note (1-3 sentence summary + relative path of the project doc) at Projects/__PROJECT_NAME__/{Decisions,Learnings}/<slug>.md.
+        v.   Also write a thin-pointer vault note (1-3 sentence summary + relative path of the project doc) at Projects/__PROJECT_NAME__/{Decisions,Learnings}/<slug>.md. Include `source: <repo-relative path>` in the frontmatter — the audit and reconciliation steps key off this field.
         vi.  List each project-repo write under "## Project repo writes" in the output.
 
       Otherwise → substantive vault note at Projects/__PROJECT_NAME__/{Decisions,Learnings}/<slug>.md.
 
-   Frontmatter on every new vault note: type, description, created (+ project for project-scoped). type ∈ {preference, reference, decision, learning, tool, people}.
+   Frontmatter on every new vault note: type, description, created (+ project for project-scoped; + source for thin-pointer notes mirroring a project doc). type ∈ {preference, reference, decision, learning, tool, people}.
 
 3. MODIFY existing notes only on explicit user correction in the transcript. Smallest edit. Inferred staleness → flag in output, do not edit. Otherwise the only modification allowed is appending to today's journal.
 
    Whenever you modify or extend a non-journal note (step 2 near-duplicate extension or step 3 correction), check its frontmatter `description` against the new body. If the one-line summary no longer fits, rewrite it. The auto-overview shown at SessionStart is built from these descriptions — stale ones mislead future sessions.
 
-4. INTEGRITY (deltas from steps 1-3 only, plus journal-linked notes):
-   - Frontmatter complete (type, description, created; + project under Projects/).
-   - Every [[wikilink]] resolves: path-qualified to a file; bare matches a vault basename.
-   - For each non-journal vault note referenced in today's journal entry written in step 1 (any [[wikilink]] or vault-relative path mentioned in the bullets you just wrote), re-read it and judge whether its frontmatter `description` still summarizes the body. If drift, rewrite `description` (smallest edit) and add the path to the delta list.
-   Auto-fix unambiguous issues. List ambiguous ones under "## Integrity flags". Do not scan files outside the deltas + journal-linked set.
+4. INTEGRITY — operates on:
+   (a) vault notes touched in steps 1-3 above
+   (b) non-journal vault notes referenced (wikilinks/paths) in today's journal entry
+   (c) project repo *.md files changed during this session
+   (d) vault *.md files changed since the last commit
 
-OUTPUT: list of vault paths created/appended, then "## Project repo writes" (paths in __PROJECT_DIR__), then "## Integrity flags". No narrative.
+   To enumerate (c) and (d):
+     # (c) Project repo doc changes — committed-since-session-start + working tree + untracked
+     if [ -n "__PROJECT_HEAD__" ]; then
+       git -C __PROJECT_DIR__ diff --name-status -M __PROJECT_HEAD__ HEAD -- '*.md'
+     fi
+     git -C __PROJECT_DIR__ diff --name-status -M HEAD -- '*.md'
+     git -C __PROJECT_DIR__ ls-files --others --exclude-standard -- '*.md'
+     # Filter out boilerplate: .github/, .cursor/, .vscode/, any top-level dotfile dir,
+     # LICENSE*.md, CODE_OF_CONDUCT.md, SECURITY.md, CHANGELOG.md, PR/ISSUE templates.
+
+     # (d) Vault doc changes — same shape, run inside __VAULT__
+     python3 __PLUGIN_ROOT__/scripts/_vault.py vault-changes \
+       $( [ -n "__VAULT_HEAD__" ] && echo --base-sha __VAULT_HEAD__ )
+
+   Per-source checks:
+
+   - (a) + (b): frontmatter completeness (type, description, created; + project under Projects/); every [[wikilink]] resolves; description-vs-body drift (rewrite description on drift, smallest edit).
+
+   - (c) Project repo doc changes — POINTER RECONCILIATION:
+     Build a pointer index by scanning Projects/__PROJECT_NAME__/ for notes whose frontmatter has `source: <path>`. For each changed project doc:
+       * MODIFIED + pointer exists → re-read the source and the pointer; if the pointer's body or description no longer summarizes the source, rewrite the pointer (smallest edit; description first, body only if structure shifted). SKIP if the source file is currently dirty in `git -C __PROJECT_DIR__ status --porcelain -- <path>` — defer to next session and add a note under "## Integrity flags".
+       * ADDED + no pointer → list under "## New pointer suggestions" with the proposed category (Decisions / Learnings / Research / References) based on the doc's content. DO NOT auto-create.
+       * DELETED + pointer exists → list under "## Stale pointers (source deleted)". DO NOT auto-remove the pointer — deletion may have been accidental.
+       * RENAMED (old → new) + pointer exists → rewrite the pointer's `source:` frontmatter to the new path (smallest edit). Update its description if the source's content shifted. List under "## Pointer rewrites".
+
+   - (d) Vault file changes — BACKLINK RECONCILIATION:
+       * RENAMED (old → new) → use `python3 __PLUGIN_ROOT__/scripts/_vault.py incoming-wikilinks --target <old>` to find every note linking to the OLD path. Auto-rewrite each occurrence to the NEW path (smallest edit; preserve any |alias text). For bare basename links, prefer the new basename. List rewrites under "## Backlink rewrites".
+       * DELETED → use `incoming-wikilinks --target <deleted-path>` to find broken backlinks. List under "## Broken backlinks (target deleted)". DO NOT auto-fix — deletion may be intentional or may be a rename the diff couldn't infer.
+       * ADDED / MODIFIED → no backlink action needed.
+
+   Auto-fix unambiguous issues (description drift, source-rename, backlink-rename). List ambiguous and non-fixable items in their dedicated sections.
+
+OUTPUT sections (in order, omit when empty):
+  ## Vault writes              (paths created/appended)
+  ## Project repo writes       (paths in __PROJECT_DIR__)
+  ## Pointer rewrites          (vault pointer notes whose source was renamed)
+  ## Backlink rewrites         (vault notes whose [[wikilinks]] were updated for renames)
+  ## New pointer suggestions   (added repo docs without a pointer)
+  ## Stale pointers (source deleted)
+  ## Broken backlinks (target deleted)
+  ## Integrity flags           (everything ambiguous or deferred)
+
+No narrative outside these sections.
 PROMPT_EOF
 
 REVIEW_PROMPT=$(printf '%s' "$REVIEW_PROMPT_TMPL" | sed \
@@ -183,7 +242,9 @@ REVIEW_PROMPT=$(printf '%s' "$REVIEW_PROMPT_TMPL" | sed \
   -e "s|__PROJECT_DIR__|${PROJECT_DIR}|g" \
   -e "s|__TODAY__|${TODAY}|g" \
   -e "s|__NOW__|${NOW}|g" \
-  -e "s|__PLUGIN_ROOT__|${PLUGIN_ROOT_PATH}|g")
+  -e "s|__PLUGIN_ROOT__|${PLUGIN_ROOT_PATH}|g" \
+  -e "s|__PROJECT_HEAD__|${PROJECT_HEAD}|g" \
+  -e "s|__VAULT_HEAD__|${VAULT_HEAD}|g")
 
 export REVIEW_PROMPT
 
@@ -207,6 +268,8 @@ nohup bash -c '
   SESSION_ID='"$(printf %q "$SESSION_ID")"'
   USAGE_LOGGER='"$(printf %q "$USAGE_LOGGER")"'
   SLIM_TRANSCRIPT='"$(printf %q "$SLIM_TRANSCRIPT")"'
+  SAFE_SID='"$(printf %q "${SAFE_SID:-}")"'
+  SESSION_STATE_DIR='"$(printf %q "$SESSION_STATE_DIR")"'
 
   if [ "$RUN_REVIEW" = "true" ]; then
     echo "[$(ts)] starting review for project=$PROJECT_NAME transcript=$TRANSCRIPT" >> "$LOG"
@@ -276,6 +339,12 @@ nohup bash -c '
 
   if [ -n "$SLIM_TRANSCRIPT" ] && [ -f "$SLIM_TRANSCRIPT" ]; then
     rm -f "$SLIM_TRANSCRIPT"
+  fi
+
+  # Clean up per-session HEAD SHA files now that the review has consumed them.
+  if [ -n "$SAFE_SID" ] && [ -n "$SESSION_STATE_DIR" ]; then
+    rm -f "$SESSION_STATE_DIR/$SAFE_SID.project_head" 2>/dev/null || true
+    rm -f "$SESSION_STATE_DIR/$SAFE_SID.vault_head" 2>/dev/null || true
   fi
 ' >/dev/null 2>&1 &
 
