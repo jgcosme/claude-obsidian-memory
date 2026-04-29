@@ -7,7 +7,7 @@ Both optional. Cap 3 paths.
 INJECT when:
 - user references prior work or names a topic an overview bullet captures
 - user describes a symptom whose cause an overview bullet covers
-- user proposes/imperatively does something an overview bullet's guardrail covers (decision/learning/preference) OR names a task a tool note covers ("send a message" → Slack)
+- user proposes or imperatively does something covered by a guardrail in the overview (decision/learning/preference) OR names a task a tool note covers ("send a message" → Slack)
 - user asks about a category over time (use `search` with `type`)
 
 SKIP: meta about the agent/gate/prompts; greetings or short replies; generic tech questions; clean imperatives with no overview-flagged constraint; hypotheticals about absent topics; anything the overview itself answers. If 50/50, output {}.

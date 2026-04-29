@@ -116,6 +116,9 @@ fi
 # ---------------------------------------------------------------------------
 # Build prompts: SYSTEM (cacheable) + USER (per-call)
 # ---------------------------------------------------------------------------
+# NOTE: This heredoc is wrapped in $(...) so bash scans the body for matched
+# quote pairs. Do NOT use apostrophes in the prompt text — they break parsing.
+# Phrase around them ("the bullet's X" → "the X in a bullet").
 GATE_SYSTEM_PROMPT=$(cat <<PROMPT
 Retrieval gate for an Obsidian vault. Default to {}; inject only when a specific note demonstrably helps. Output ONE JSON object on a single line, no prose. \`read\` paths must include the \`.md\` extension and come from the overview below.
 
@@ -126,7 +129,7 @@ Both optional. Cap $PATH_CAP paths.
 INJECT when:
 - user references prior work or names a topic an overview bullet captures
 - user describes a symptom whose cause an overview bullet covers
-- user proposes/imperatively does something an overview bullet's guardrail covers (decision/learning/preference) OR names a task a tool note covers ("send a message" → Slack)
+- user proposes or imperatively does something covered by a guardrail in the overview (decision/learning/preference) OR names a task a tool note covers ("send a message" → Slack)
 - user asks about a category over time (use \`search\` with \`type\`)
 
 SKIP: meta about the agent/gate/prompts; greetings or short replies; generic tech questions; clean imperatives with no overview-flagged constraint; hypotheticals about absent topics; anything the overview itself answers. If 50/50, output {}.

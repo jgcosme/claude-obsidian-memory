@@ -78,6 +78,32 @@ def parse_gate_output(raw: str) -> dict | None:
         return None
 
 
+def check_heredoc_safe(prompt: str) -> str | None:
+    """Return an error message if the prompt would break the live hook's
+    `$(cat <<PROMPT ... PROMPT)` heredoc, else None.
+
+    The live `user-prompt-submit.sh` wraps the prompt in command substitution,
+    which makes bash scan the body for matched quote pairs even though
+    heredocs normally don't honor quotes. An odd number of single quotes
+    (apostrophes) breaks the script with a syntax error far away from the
+    actual offending line.
+    """
+    wrapper = f'X=$(cat <<PROMPT\n{prompt}\nPROMPT\n)\n'
+    result = subprocess.run(["bash", "-n"], input=wrapper, capture_output=True, text=True)
+    if result.returncode != 0:
+        bad_lines = [
+            f"  L{i + 1}: {ln}" for i, ln in enumerate(prompt.splitlines()) if "'" in ln
+        ]
+        hint = "\n".join(bad_lines) if bad_lines else "(no apostrophes found — different cause)"
+        return (
+            "prompt would break the live hook's heredoc:\n"
+            f"  {result.stderr.strip()}\n"
+            "lines containing apostrophes (likely culprit):\n"
+            f"{hint}"
+        )
+    return None
+
+
 def generate_overview() -> str:
     out = subprocess.check_output(
         ["python3", str(VAULT_PY), "--vault", str(FIXTURE_VAULT),
@@ -235,6 +261,12 @@ def main() -> int:
         return 2
     prompt = prompt_path.read_text()
     tag = args.tag or prompt_path.stem
+
+    err = check_heredoc_safe(prompt)
+    if err:
+        print(f"error: {err}", file=sys.stderr)
+        return 2
+
     cases = json.loads(CASES_FILE.read_text())
     overview = generate_overview()
 

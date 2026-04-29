@@ -44,6 +44,10 @@ tests/
     └── vault/               # synthetic vault the gate sees
 ```
 
+### Heredoc safety pre-flight
+
+The harness runs a `bash -n` syntax check on a synthetic `$(cat <<PROMPT ... PROMPT)` wrapper around the candidate prompt before doing anything else. The live hook (`hooks/scripts/user-prompt-submit.sh`) embeds the prompt in exactly that pattern, and an apostrophe inside it ("the bullet's X") makes bash hunt for a matching `'` and fail at parse time — typically with a misleading error pointing at a `case` statement 100+ lines below. If you see `error: prompt would break the live hook's heredoc`, search the prompt for apostrophes and rephrase.
+
 ### Caveats
 
 - **Fixture-bound.** Cases reference fixture-vault notes by exact path. Editing fixture notes likely breaks expectations — update `cases.json` in the same change.
