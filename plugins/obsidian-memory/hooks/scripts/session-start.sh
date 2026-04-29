@@ -33,6 +33,13 @@ fi
 OBSIDIAN_VAULT_PATH="${OBSIDIAN_VAULT_PATH:-$HOME/Documents/Obsidian Vault}"
 PLUGIN_ROOT="${CLAUDE_PLUGIN_ROOT:-}"
 
+# Refresh the stable status-line symlink each session so plugin upgrades
+# (which move CLAUDE_PLUGIN_ROOT to a new versioned path) keep working
+# without requiring the user to re-run setup.
+if [ -n "$PLUGIN_ROOT" ] && [ -f "$PLUGIN_ROOT/scripts/statusline.py" ] && [ -d "$HOME/.config/claude-memory" ]; then
+  ln -sfn "$PLUGIN_ROOT/scripts/statusline.py" "$HOME/.config/claude-memory/statusline.py" 2>/dev/null || true
+fi
+
 # Auto-detect Obsidian CLI (optional — only used for reactive queries)
 if [ -z "${OBSIDIAN_CLI:-}" ]; then
   if [ -x "/Applications/Obsidian.app/Contents/MacOS/obsidian" ]; then

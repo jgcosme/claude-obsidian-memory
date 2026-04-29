@@ -168,6 +168,44 @@ if [ -f "$TEMPLATES_DIR/.gitignore" ] && [ ! -f "$VAULT_PATH/.gitignore" ]; then
 fi
 
 echo ""
+
+# ---------------------------------------------------------------------------
+# 5. Status line: stable symlink + jq-patch ~/.claude/settings.json so the
+# plugin's token usage appears as a Claude Code status line out of the box.
+# Skips patching if the user already has a statusLine configured (we don't
+# clobber existing customizations).
+# ---------------------------------------------------------------------------
+STABLE_STATUSLINE="${HOME}/.config/claude-memory/statusline.py"
+PLUGIN_STATUSLINE="$PLUGIN_ROOT/scripts/statusline.py"
+if [ -f "$PLUGIN_STATUSLINE" ]; then
+  ln -sfn "$PLUGIN_STATUSLINE" "$STABLE_STATUSLINE"
+  echo "[+] linked $STABLE_STATUSLINE → $PLUGIN_STATUSLINE"
+
+  CLAUDE_SETTINGS="${HOME}/.claude/settings.json"
+  if command -v jq >/dev/null 2>&1; then
+    if [ ! -f "$CLAUDE_SETTINGS" ]; then
+      mkdir -p "$(dirname "$CLAUDE_SETTINGS")"
+      echo '{}' > "$CLAUDE_SETTINGS"
+    fi
+    EXISTING=$(jq -r '.statusLine.command // empty' "$CLAUDE_SETTINGS" 2>/dev/null || echo "")
+    if [ -z "$EXISTING" ]; then
+      cp "$CLAUDE_SETTINGS" "${CLAUDE_SETTINGS}.bak.$(date +%Y%m%d%H%M%S)"
+      jq --arg cmd "python3 \"$STABLE_STATUSLINE\"" \
+         '.statusLine = {type: "command", command: $cmd}' \
+         "$CLAUDE_SETTINGS" > "${CLAUDE_SETTINGS}.tmp" \
+        && mv "${CLAUDE_SETTINGS}.tmp" "$CLAUDE_SETTINGS"
+      echo "[+] enabled status line in $CLAUDE_SETTINGS"
+    elif [ "$EXISTING" = "python3 \"$STABLE_STATUSLINE\"" ]; then
+      echo "[=] status line already enabled"
+    else
+      echo "[=] status line already configured (left as-is). To use the plugin's:"
+      echo "    set statusLine.command in $CLAUDE_SETTINGS to:"
+      echo "      python3 \"$STABLE_STATUSLINE\""
+    fi
+  fi
+fi
+
+echo ""
 echo "Done. Next steps:"
 echo "  1. (Optional) Open the vault in Obsidian.app: open -a Obsidian \"$VAULT_PATH\""
 echo "  2. (Optional but recommended) Init git in the vault for change-tracking + auto-commit:"

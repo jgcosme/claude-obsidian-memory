@@ -60,11 +60,21 @@ gh repo create my-obsidian-vault --private --source "$HOME/Documents/Obsidian Va
 | `/obsidian-memory:usage` | Per-kind token breakdown + plugin's share of this session's tokens. |
 | `/obsidian-memory:audit` | Frontmatter, broken wikilinks, orphans, duplicate basenames. `--deep` adds an LLM pass for description-vs-body drift. |
 
-When the gate injects vault notes for a turn, you also see a one-line system message so you know retrieval ran:
+## Visibility
+
+When the gate injects vault notes for a turn, you see a one-line system message so you know retrieval ran:
 
 ```text
 [obsidian-memory] vault → Tools/Slack.md, General/References/secrets-env.md
 ```
+
+Setup also wires the plugin's token-usage readout into Claude Code's status line — running totals + the plugin's share of this session's tokens, repainted each turn:
+
+```text
+obsidian-memory 384.0k tok · 23.4%
+```
+
+The status line is set during `setup.sh` only if you don't already have one configured (existing customizations are left alone).
 
 ## Vault structure
 
@@ -190,6 +200,8 @@ rm -rf "$HOME/.config/claude-memory"
 rm -f /tmp/claude-memory-review.log{,.1} /tmp/claude-memory-gate.log{,.1}
 rm -rf /tmp/claude-memory-gate-state /tmp/claude-memory-usage
 ```
+
+If `setup.sh` set Claude Code's status line, remove the `statusLine` block from `~/.claude/settings.json` (a `.bak.<timestamp>` file from the original is alongside it).
 
 ## License
 
