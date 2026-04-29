@@ -45,7 +45,7 @@ Pick exactly one route based on what the moment is about.
 | yes | no  | Substantive vault note at `Projects/<name>/{Decisions,Learnings}/<slug>.md` |
 | no  | —   | Substantive vault note at `Projects/<name>/{Decisions,Learnings}/<slug>.md` |
 
-For project-doc writes: run `git -C "$CLAUDE_PROJECT_DIR" status --porcelain -- <target>` first. If non-empty, **skip the project write** (don't stomp WIP) — write only the vault note.
+For project-doc writes (yes/yes route): run `git -C "$CLAUDE_PROJECT_DIR" status --porcelain -- <target>` first. If non-empty, **skip the write** (don't stomp WIP) and tell the user where you would have written so they can revisit.
 
 ## 3. Frontmatter (required on every new note)
 
