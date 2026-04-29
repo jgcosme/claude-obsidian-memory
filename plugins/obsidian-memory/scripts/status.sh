@@ -11,7 +11,14 @@ if [ -f "$CONFIG_FILE" ]; then
 fi
 
 VAULT="${OBSIDIAN_VAULT_PATH:-$HOME/Documents/Obsidian Vault}"
-PLUGIN_ROOT="${CLAUDE_PLUGIN_ROOT:-}"
+# Self-locate: prefer $CLAUDE_PLUGIN_ROOT, otherwise derive from this script's path.
+# This makes status.sh work whether invoked through a slash command (env may or
+# may not be set) or directly from a shell.
+if [ -n "${CLAUDE_PLUGIN_ROOT:-}" ]; then
+  PLUGIN_ROOT="$CLAUDE_PLUGIN_ROOT"
+else
+  PLUGIN_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+fi
 GATE_ENABLED="${OBSIDIAN_MEMORY_GATE_ENABLED:-true}"
 AUTOCOMMIT="${OBSIDIAN_MEMORY_AUTOCOMMIT:-true}"
 AUTOPUSH="${OBSIDIAN_MEMORY_AUTOPUSH:-false}"
@@ -67,20 +74,16 @@ else
 fi
 echo ""
 
-echo "Plugin scripts:"
-if [ -z "$PLUGIN_ROOT" ]; then
-  warn "CLAUDE_PLUGIN_ROOT unset (running outside Claude Code) — script presence not checked"
-else
-  for s in scripts/_vault.py scripts/audit.py scripts/setup.sh \
-           hooks/scripts/session-start.sh hooks/scripts/session-end.sh \
-           hooks/scripts/user-prompt-submit.sh hooks/scripts/_overview.sh; do
-    if [ -f "$PLUGIN_ROOT/$s" ]; then ok "$s"; else fail "$s missing"; fi
-  done
-fi
+echo "Plugin scripts (root: $PLUGIN_ROOT):"
+for s in scripts/_vault.py scripts/audit.py scripts/setup.sh \
+         hooks/scripts/session-start.sh hooks/scripts/session-end.sh \
+         hooks/scripts/user-prompt-submit.sh hooks/scripts/_overview.sh; do
+  if [ -f "$PLUGIN_ROOT/$s" ]; then ok "$s"; else fail "$s missing"; fi
+done
 echo ""
 
 echo "Search smoke test:"
-if [ -d "$VAULT" ] && [ -n "$PLUGIN_ROOT" ] && [ -f "$PLUGIN_ROOT/scripts/_vault.py" ]; then
+if [ -d "$VAULT" ] && [ -f "$PLUGIN_ROOT/scripts/_vault.py" ]; then
   count=$(python3 "$PLUGIN_ROOT/scripts/_vault.py" --vault "$VAULT" search --json 2>/dev/null | \
           python3 -c 'import json,sys; print(len(json.load(sys.stdin)))' 2>/dev/null || echo "?")
   if [ "$count" = "?" ]; then
