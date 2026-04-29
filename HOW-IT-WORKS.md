@@ -10,7 +10,7 @@ The plugin runs three hooks across the Claude Code session lifecycle.
 2. Tries to launch Obsidian.app if available (purely so the optional `obsidian` CLI works). No-op on Linux.
 3. Derives the project name from `$CLAUDE_PROJECT_DIR` basename (or `$PWD`).
 4. Injects into context:
-   - **Bootstrap instructions** — recall/remember/route guidance.
+   - **Bootstrap instructions** — vault path + recall paths (Read tool, `_vault.py search`, optional `obsidian search`) + a one-line pointer to the `save-memory` skill for writes. Routing/frontmatter/when-to-save rules live in the skill body, not the bootstrap, so they only load when Claude invokes the skill.
    - **Vault `README.md`** — prose orientation.
    - **Auto-generated vault overview** — produced by the shared `_overview.sh` helper (cached at `$MEMORY_OVERVIEW_CACHE_DIR`, invalidated by vault `*.md` mtimes). Lists Tools, General, and the current project's Decisions/Learnings/Research/References/Journal. Other projects appear as a name list to keep the payload small. The underlying `_vault.py overview` supports `--mode {full,tools-and-general,tools-only}` for testing leaner shapes via the eval harness; production runs use the default `full`.
    - **Project-scaffolding prompt** if `Projects/<name>/` doesn't exist — instructs Claude to ask once before creating the folder.
@@ -40,6 +40,18 @@ Total injection is typically 3–8 KB depending on vault size.
 
 **Disabling:** set `OBSIDIAN_MEMORY_GATE_ENABLED=false` in `~/.config/claude-memory/config.env`.
 
+## `save-memory` skill (in-session writes)
+
+`skills/save-memory/SKILL.md` is an auto-invoked Claude Code skill. Its description triggers on corrections worth remembering across sessions, validated approaches, "from now on..." preferences, explicit "remember this", and novel cross-session facts (config details, IDs, people). It skips ordinary task work, agreements, refactors, and generic technical questions.
+
+When Claude invokes it, the body provides the routing rules (Personal vs Project, team-relevant + has-docs → upstream-reflect, project-doc WIP guard), the frontmatter schema, and a propose-then-write UX (preview + `save? (y/n)` before any file is written). Search-first dedup against the existing vault prevents duplicate notes.
+
+The skill is the **eager** path for in-session writes — moments are captured at the time they happen, with user confirmation. The `SessionEnd` review (below) is the **retrospective** path — it sees the full transcript and catches anything the skill missed (especially quiet validations like "yeah, that was the right call" that lack a clear linguistic trigger).
+
+**Why a skill, not a prompt rule:** the SessionStart bootstrap previously held the full when-to-save + routing + frontmatter rules and re-injected them every turn. Most turns don't write a memory, so those rules were always loaded but rarely acted on. A skill description (one paragraph in the system prompt) loads the body only on invocation — same coverage, much less always-on context, and the trigger description is sharper than mixed-in prose. Eval data backs this: see `tests/run_write_eval.py` and the corresponding `cases-write.json`.
+
+**Why the gate isn't also a skill:** the retrieval gate runs *before* Claude reasons about the prompt. Several of its categories — "decision rejustification", "implicit user-pref", "imperative-with-guardrail" — fire on prompts that have no surface cue ("set up a cron job" when there's a no-cron decision). A skill would only fire after Claude has already started down a path. The gate's specialization also matters quantitatively: a skill-style framing without the gate's "default to {}" tuning over-injects on meta and generic prompts. See `tests/run_gate_eval.py` results comparing `prompts/current.txt` vs `prompts/skill-style.txt`.
+
 ## `SessionEnd`
 
 `hooks/scripts/session-end.sh` backgrounds a `claude -p` subprocess that:
@@ -49,7 +61,7 @@ Total injection is typically 3–8 KB depending on vault size.
 3. Writes new notes proactively when ALL of:
    - the information is significant (correction, validated approach, decision, novel fact),
    - it will be useful in future sessions,
-   - and no existing note already covers it (verified by typed search before writing).
+   - and no existing note already covers it (verified by typed search before writing — this is also what dedupes against in-session writes from the `save-memory` skill).
 4. Modifies existing notes only on **explicit user correction** in the transcript — not inference. Inferred staleness is flagged for the next session. When a non-journal note is extended or corrected, its frontmatter `description` is rewritten if the one-line summary no longer fits — this keeps the `SessionStart` auto-overview accurate.
 5. Runs a delta integrity check on its own writes (frontmatter complete, wikilinks resolve), plus a `description`-vs-body check on any non-journal note linked from today's journal entry.
 6. Independently `git add -A && git commit`s any vault changes when `OBSIDIAN_MEMORY_AUTOCOMMIT=true` (default). Push is opt-in (`OBSIDIAN_MEMORY_AUTOPUSH=true`). Wrapped in `flock` to prevent concurrent sessions racing.

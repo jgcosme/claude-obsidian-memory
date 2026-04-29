@@ -1,6 +1,6 @@
 # obsidian-memory
 
-A Claude Code plugin that turns a markdown directory into Claude's persistent memory. The vault is git-tracked, frontmatter-driven, and Obsidian-friendly — Obsidian.app is optional. Three hooks handle recall, journaling, and proactive note-writing across the session lifecycle.
+A Claude Code plugin that turns a markdown directory into Claude's persistent memory. The vault is git-tracked, frontmatter-driven, and Obsidian-friendly — Obsidian.app is optional. Three lifecycle hooks plus an in-session skill handle recall, journaling, and proactive note-writing.
 
 ## Why
 
@@ -10,7 +10,7 @@ Claude Code's per-project auto-memory (`~/.claude/projects/*/memory/`) is siloed
 - **Frontmatter as source of truth.** Every note declares `type`, `description`, `created` (and `project` when scoped). The plugin writes those fields automatically and derives everything else (recall, summaries, audits) from them — no index to maintain.
 - **Git-tracked.** Every memory write is a diff. Auto-commit on by default; auto-push opt-in.
 - **Obsidian-friendly, not Obsidian-required.** The vault is just markdown — search runs in pure Python. Obsidian.app adds a UI but no plugin-required functionality.
-- **Three lifecycle hooks.** `SessionStart` loads context, `UserPromptSubmit` retrieves relevant notes per turn, `SessionEnd` journals and writes new notes proactively (with dedup-by-search, integrity check, and auto-commit).
+- **Three lifecycle hooks + one skill.** `SessionStart` loads context, `UserPromptSubmit` retrieves relevant notes per turn, an auto-invoked `save-memory` skill captures save-worthy moments mid-session (corrections, validated approaches, "from now on..." preferences, novel facts), and `SessionEnd` writes the journal entry and backstops anything the skill missed (with dedup-by-search, integrity check, and auto-commit).
 
 For internals, see [HOW-IT-WORKS.md](./HOW-IT-WORKS.md).
 
