@@ -365,7 +365,7 @@ done <<< "$PATHS"
 [ ${#DUPED[@]} -gt 0 ] && echo "[$(ts)] gate: skipped already-injected this session: ${DUPED[*]}" >> "$LOG"
 
 if [ "$INJECTED" -gt 0 ]; then
-  # Comma-joined list of injected paths for the visible status line.
+  # Comma-joined list of injected paths for the visible system message.
   joined=""
   for p in "${INJECTED_PATHS[@]}"; do
     if [ -z "$joined" ]; then joined="$p"; else joined="$joined, $p"; fi
@@ -382,10 +382,6 @@ if [ "$INJECTED" -gt 0 ]; then
     --arg msg "$user_msg" \
     --arg ctx "$additional_context" \
     '{systemMessage: $msg, hookSpecificOutput: {hookEventName: "UserPromptSubmit", additionalContext: $ctx}}'
-
-  # Belt-and-suspenders: also write a colored line to stderr in case the
-  # systemMessage channel is clobbered by TUI redraws (see anthropics/claude-code#12653).
-  printf '\033[1;36m[obsidian-memory]\033[0m \033[36m%s\033[0m\n' "$user_msg" >&2
 
   echo "[$(ts)] gate: injected $INJECTED notes ($joined)" >> "$LOG"
 

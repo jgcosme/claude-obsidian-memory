@@ -44,28 +44,26 @@ To run setup manually instead — or to scaffold without starting a Claude sessi
 bash "$CLAUDE_PLUGIN_ROOT/scripts/setup.sh"
 ```
 
-It's idempotent. It first verifies prerequisites (`jq`, `python3 ≥ 3.9`, `git`, optional `flock`) and exits with a clear message if any required tool is missing. It then creates `~/Documents/Obsidian Vault/` (or wherever `OBSIDIAN_VAULT_PATH` points), `~/.config/claude-memory/config.env`, and a `chmod 600` `secrets.env`.
-
-To verify the install at any time:
-
-```text
-/obsidian-memory:status
-```
-
-Reports config, vault, prereqs, plugin scripts, search smoke-test, overview cache, and the latest review/gate log lines.
-
-To see how many tokens the plugin is consuming in the current session:
-
-```text
-/obsidian-memory:usage
-```
-
-Lists per-event-kind token counts (`session_start`, `gate_inject`, `gate_call`, `review_call`) and computes the plugin's share of this session's total tokens. Multiply that share by Claude Code's `/usage` percentage to estimate the plugin's contribution to your rate-limit quota for the session.
+Idempotent. Verifies prerequisites and creates the vault, config, and a `chmod 600` `secrets.env`.
 
 Optional — push the vault to a private GitHub remote so it follows you across machines:
 
 ```bash
 gh repo create my-obsidian-vault --private --source "$HOME/Documents/Obsidian Vault" --remote origin --push
+```
+
+## Slash commands
+
+| Command | What it does |
+|---|---|
+| `/obsidian-memory:status` | Health check: config, vault, prereqs, scripts, recent activity. |
+| `/obsidian-memory:usage` | Per-kind token breakdown + plugin's share of this session's tokens. |
+| `/obsidian-memory:audit` | Frontmatter, broken wikilinks, orphans, duplicate basenames. `--deep` adds an LLM pass for description-vs-body drift. |
+
+When the gate injects vault notes for a turn, you also see a one-line system message so you know retrieval ran:
+
+```text
+[obsidian-memory] vault → Tools/Slack.md, General/References/secrets-env.md
 ```
 
 ## Vault structure
@@ -99,34 +97,6 @@ created: YYYY-MM-DD
 project: <project-name>     # only for project-scoped notes
 ---
 ```
-
-## Querying the vault
-
-Pure-Python search, works without Obsidian:
-
-```bash
-# Yesterday's learnings across all projects
-YESTERDAY=$(date -v-1d +%Y-%m-%d)
-python3 "$CLAUDE_PLUGIN_ROOT/scripts/_vault.py" search --type learning --created-after "$YESTERDAY"
-
-# All decisions for project foo
-python3 "$CLAUDE_PLUGIN_ROOT/scripts/_vault.py" search --type decision --path-prefix "Projects/foo"
-
-# Notes mentioning "auth" anywhere
-python3 "$CLAUDE_PLUGIN_ROOT/scripts/_vault.py" search --keywords "auth"
-```
-
-If Obsidian.app is running and the CLI is registered, `obsidian search` is also available with bracket-syntax filters (`[type:decision]`, `path:Projects/foo`); it doesn't support date-range queries — use the Python CLI for those.
-
-Full vault audit (frontmatter, broken wikilinks, orphans, duplicate basenames):
-
-```bash
-python3 "$CLAUDE_PLUGIN_ROOT/scripts/audit.py"
-```
-
-Exits non-zero on issues; suitable for a pre-push hook or weekly cron. Does not auto-fix.
-
-The `/obsidian-memory:audit` slash command wraps this and summarizes the output. Pass `--deep` to add an LLM pass that flags `description`-vs-body drift across the vault — useful when notes have been heavily extended since their description was set. Lists candidates with suggested replacements; does not auto-fix.
 
 ## Configuration
 
@@ -186,14 +156,6 @@ Anthropic's prompt cache amortizes the static portion (overview in `--system-pro
 
 `SessionEnd` review and auto-commit run **in the background** — no shell wait time.
 
-When the gate decides to inject vault notes for a turn, you see a status line so you can see retrieval at work:
-
-```text
-[obsidian-memory] vault → Tools/Slack.md, General/References/secrets-env.md
-```
-
-The line goes to the official `systemMessage` channel via the Claude Code hooks spec (the user-visible status channel) plus a bold-cyan stderr fallback for TUI states where `systemMessage` is clobbered by redraws.
-
 ## Token telemetry
 
 Both `claude -p` calls (the gate and the SessionEnd review) use `--output-format json` and capture exact `usage` from the API response. Every hook also logs the size of any text it injects into your main session. The four event kinds:
@@ -205,7 +167,7 @@ Both `claude -p` calls (the gate and the SessionEnd review) use `--output-format
 | `gate_call` | `claude -p` for the retrieval gate, every UserPromptSubmit | one separate API call against your rate limit |
 | `review_call` | `claude -p` for the SessionEnd review | one separate API call (typically large because it processes the full transcript) |
 
-Events are appended to `/tmp/claude-memory-usage/<session_id>.jsonl`. `/obsidian-memory:usage` reads the current session's file, joins it against the main-session transcript at `~/.claude/projects/<encoded-cwd>/<session_id>.jsonl`, and prints a per-kind breakdown plus a `Session share` line.
+Run `/obsidian-memory:usage` to see the breakdown plus the plugin's share of total session tokens.
 
 ## Documentation
 

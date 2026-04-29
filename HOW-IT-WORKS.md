@@ -26,7 +26,7 @@ Total injection is typically 3–8 KB depending on vault size.
 3. The gate inherits the user's default model. Anthropic's prompt cache reuses the overview (in `--system-prompt`) across calls within the 5-min TTL.
 4. The gate returns JSON: `{"read": [...], "search": [{type, keywords, path_prefix, created_after, created_before}]}`.
 5. The hook executes any typed searches via `_vault.py search`, merges read paths + search hits, validates each path exists in the vault and isn't a path-traversal attempt, deduplicates against the per-session injected list, and caps at `OBSIDIAN_MEMORY_GATE_PATH_CAP` (default 3).
-6. Surviving paths get their bodies emitted as additional context (truncated per-note at `OBSIDIAN_MEMORY_GATE_NOTE_BYTE_CAP`, default 10 KB). The hook emits the official Claude Code hooks-spec JSON on stdout — `{systemMessage, hookSpecificOutput: {hookEventName: "UserPromptSubmit", additionalContext}}` — where `systemMessage` is shown to the user and `additionalContext` is injected into Claude's context. As a belt-and-suspenders fallback (some TUI states clobber `systemMessage`, see `anthropics/claude-code#12653`), it also writes a bold-cyan line to stderr:
+6. Surviving paths get their bodies emitted as additional context (truncated per-note at `OBSIDIAN_MEMORY_GATE_NOTE_BYTE_CAP`, default 10 KB). The hook emits the official Claude Code hooks-spec JSON on stdout — `{systemMessage, hookSpecificOutput: {hookEventName: "UserPromptSubmit", additionalContext}}` — where `systemMessage` is shown to the user and `additionalContext` is injected into Claude's context:
 
    ```text
    [obsidian-memory] vault → Tools/Slack.md, General/References/secrets-env.md
