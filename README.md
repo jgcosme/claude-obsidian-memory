@@ -58,7 +58,7 @@ gh repo create my-obsidian-vault --private --source "$HOME/Documents/Obsidian Va
 |---|---|
 | `/obsidian-memory:status` | Health check: config, vault, prereqs, scripts, recent activity. |
 | `/obsidian-memory:usage` | Per-kind token breakdown + plugin's share of this session's tokens. |
-| `/obsidian-memory:audit` | Frontmatter, broken wikilinks, orphans, duplicate basenames. `--deep` adds an LLM pass for description-vs-body drift. |
+| `/obsidian-memory:audit` | Frontmatter, broken wikilinks, orphans, duplicate basenames; plus repo-pointer drift when run inside a project (broken `source:` paths, repo `*.md` files without vault pointers). `--deep` adds an LLM pass for description-vs-body drift. |
 
 ## Visibility
 
@@ -105,6 +105,7 @@ type: tool | user | preference | people | admin | reference | overview | journal
 description: one-line hook
 created: YYYY-MM-DD
 project: <project-name>     # only for project-scoped notes
+source: <repo-relative path>   # only on thin-pointer notes that mirror a project doc — drives audit + SessionEnd reconciliation
 ---
 ```
 

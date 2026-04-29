@@ -14,6 +14,7 @@ The plugin runs three hooks across the Claude Code session lifecycle.
    - **Vault `README.md`** — prose orientation.
    - **Auto-generated vault overview** — produced by the shared `_overview.sh` helper (cached at `$MEMORY_OVERVIEW_CACHE_DIR`, invalidated by vault `*.md` mtimes). Lists Tools, General, and the current project's Decisions/Learnings/Research/References/Journal. Other projects appear as a name list to keep the payload small. The underlying `_vault.py overview` supports `--mode {full,tools-and-general,tools-only}` for testing leaner shapes via the eval harness; production runs use the default `full`.
    - **Project-scaffolding prompt** if `Projects/<name>/` doesn't exist — instructs Claude to ask once before creating the folder.
+5. Records the project's and the vault's `git rev-parse HEAD` to `/tmp/claude-memory-session/<session_id>.{project,vault}_head` so `SessionEnd` can diff-scope pointer + backlink reconciliation to "what changed during this session" — including mid-session commits that working-tree-only diff would miss. Best-effort; absent values fall back to working-tree-only diffs at SessionEnd.
 
 Total injection is typically 3–8 KB depending on vault size.
 
@@ -65,8 +66,21 @@ The skill is the **eager** path for in-session writes — moments are captured a
    - it will be useful in future sessions,
    - and no existing note already covers it (verified by typed search before writing — this is also what dedupes against in-session writes from the `save-memory` skill).
 4. Modifies existing notes only on **explicit user correction** in the transcript — not inference. Inferred staleness is flagged for the next session. When a non-journal note is extended or corrected, its frontmatter `description` is rewritten if the one-line summary no longer fits — this keeps the `SessionStart` auto-overview accurate.
-5. Runs a delta integrity check on its own writes (frontmatter complete, wikilinks resolve), plus a `description`-vs-body check on any non-journal note linked from today's journal entry.
-6. Independently `git add -A && git commit`s any vault changes when `OBSIDIAN_MEMORY_AUTOCOMMIT=true` (default). Push is opt-in (`OBSIDIAN_MEMORY_AUTOPUSH=true`). Wrapped in `flock` to prevent concurrent sessions racing.
+5. Runs an integrity + reconciliation pass over four corpora:
+   - **(a) own writes** from steps 2–4 — frontmatter complete, wikilinks resolve, `description`-vs-body drift on extends/corrects.
+   - **(b) journal-linked notes** — non-journal notes referenced from today's journal entry get the same `description`-vs-body check.
+   - **(c) project repo `*.md` changes since session start** (via the `project_head` SHA, falling back to working-tree-only diff) — *pointer reconciliation*. For each changed doc, the review consults the pointer index built from `Projects/<name>/` notes whose frontmatter has `source: <repo-relative path>`:
+     - **modified + pointer exists** → re-read source and pointer; rewrite the pointer's description (smallest edit) if it no longer summarizes the source. Skipped if the source is currently dirty in `git status` (defers to next session to avoid syncing to a half-edit).
+     - **added + no pointer** → listed under `## New pointer suggestions`. Never auto-created — placement requires judgment (Decisions / Learnings / Research / References).
+     - **deleted + pointer exists** → listed under `## Stale pointers (source deleted)`. Never auto-removed — deletion may have been accidental.
+     - **renamed + pointer exists** → auto-rewrites the pointer's `source:` frontmatter to the new path; updates the description if content shifted. Listed under `## Pointer rewrites`.
+   - **(d) vault `*.md` changes since last commit** (via the `vault_head` SHA, falling back to working-tree-only diff) — *backlink reconciliation*:
+     - **renamed (old → new)** → finds every incoming `[[wikilink]]` resolving to the old path (path-qualified literal match, or unambiguous bare basename) via `_vault.py incoming-wikilinks --target <old>` and auto-rewrites each to the new path (smallest edit, `|alias` text preserved). Listed under `## Backlink rewrites`.
+     - **deleted** → lists incoming wikilinks under `## Broken backlinks (target deleted)`. Never auto-fixed — deletion may be intentional or a rename the diff couldn't infer.
+
+   Boilerplate filenames (`LICENSE*`, `CODE_OF_CONDUCT.md`, `SECURITY.md`, `CHANGELOG.md`, PR/ISSUE templates) and top-level dotfile dirs (`.github/`, `.cursor/`, `.vscode/`, `.devcontainer/`, …) are filtered automatically when scanning the project repo, so IDE config and CI scaffolding don't show up as missing-pointer candidates.
+
+6. Independently `git add -A && git commit`s any vault changes when `OBSIDIAN_MEMORY_AUTOCOMMIT=true` (default) — including pointer + backlink rewrites from step 5. Push is opt-in (`OBSIDIAN_MEMORY_AUTOPUSH=true`). Wrapped in `flock` to prevent concurrent sessions racing.
 
 The hook returns immediately; the review runs in the background and logs to `/tmp/claude-memory-review.log`. The review subprocess uses `claude -p --strict-mcp-config --output-format json` (same MCP-isolation rationale as the gate); on success the wrapper extracts the call's `.usage` / `.total_cost_usd` / `.duration_ms` and appends a `review_call` event to `/tmp/claude-memory-usage/<session_id>.jsonl`.
 
@@ -118,7 +132,7 @@ The `SessionEnd` review and the retrieval gate both spawn `claude -p`. The subpr
 1. Creates `Projects/<name>/{Decisions,Learnings,Research,References,Journal}` and renders `overview.md` from the template.
 2. Inspects the project dir — top-level docs (README, ARCHITECTURE, CONTRIBUTING, CHANGELOG), package manifests, ADR folders, runbooks, design docs, RFCs, /docs, build/CI config. Skips source and vendored deps.
 3. Populates `overview.md` with the standard section headings (`## What it is`, `## Goals`, `## Current branch / focus`, `## Stakeholders`, `## Notes`), citing source files inline. Sections without grounded evidence are left empty.
-4. Seeds subfolders with thin pointers (1–3 sentence summary + relative source path):
+4. Seeds subfolders with thin pointers (1–3 sentence summary + relative source path). Each pointer's frontmatter must include `source: <repo-relative path>` — that field is what `/obsidian-memory:audit` and the SessionEnd reconciliation pass key off to detect drift, broken sources, and renames.
    - `References/` — entry-point pointers (architecture, API specs, getting-started, contributing)
    - `Decisions/` — ADRs and design choices
    - `Learnings/` — runbooks, troubleshooting, postmortems
