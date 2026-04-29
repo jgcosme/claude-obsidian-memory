@@ -170,13 +170,20 @@ def _bullet(rel: str, fm: dict[str, str]) -> str:
     return f"{base} — {desc}" if desc else base
 
 
-def overview(vault: Path, project: str | None = None) -> str:
+def overview(vault: Path, project: str | None = None, mode: str = "full") -> str:
     """Build a markdown overview of the vault, scoped to current project's
     notes for the Projects/ section to keep payload small.
 
     Excludes README.md files (treated as navigation/prose, surfaced separately
     by the SessionStart hook).
+
+    Modes:
+      full              Tools + General + current project (deep) + others (names)
+      tools-and-general Tools + General; Projects = names only (gate uses search)
+      tools-only        Tools only; gate uses search for everything else
     """
+    if mode not in {"full", "tools-and-general", "tools-only"}:
+        raise ValueError(f"unknown overview mode: {mode}")
     md_files = [f for f in collect_md_files(vault) if f.name != "README.md"]
     notes: list[tuple[Path, dict[str, str]]] = []
     for f in md_files:
@@ -200,8 +207,14 @@ def overview(vault: Path, project: str | None = None) -> str:
 
     out: list[str] = ["# Vault overview", ""]
 
-    # Tools — flat list
+    # Tools — flat list (always included)
     out += section("Tools", "Tools/")
+
+    if mode == "tools-only":
+        out.append("_All non-Tools vault content is searchable via the `search` field "
+                   "(filter by `type`, `path_prefix`, `keywords`, dates)._")
+        out.append("")
+        return "\n".join(out)
 
     # General — broken into subsections by folder
     general_subs = ["", "Preferences/", "People/", "Admin/", "References/"]
@@ -236,7 +249,7 @@ def overview(vault: Path, project: str | None = None) -> str:
         out.append("_(empty)_")
     out.append("")
 
-    # Projects — current project only (deep), others listed by name
+    # Projects
     out.append("## Projects")
     project_dirs: list[str] = []
     if (vault / "Projects").is_dir():
@@ -244,6 +257,21 @@ def overview(vault: Path, project: str | None = None) -> str:
             d.name for d in (vault / "Projects").iterdir()
             if d.is_dir() and d.name not in SKIP_DIRS
         )
+
+    if mode == "tools-and-general":
+        # Names only; gate uses `search` for project content.
+        if project_dirs:
+            out.append("(use `search` with `path_prefix: Projects/<name>` "
+                       "and/or `type` to query project notes)")
+            for p in project_dirs:
+                marker = "  ← current" if p == project else ""
+                out.append(f"- {p}{marker}")
+        else:
+            out.append("_(no projects yet)_")
+        out.append("")
+        return "\n".join(out)
+
+    # mode == "full" — current project deep, others by name
     if project:
         out.append(f"### Current project: {project}")
         scope_prefix = f"Projects/{project}/"
@@ -317,7 +345,7 @@ def _cmd_overview(args: argparse.Namespace) -> int:
     if not vault.is_dir():
         print(f"vault not found at: {vault}", file=sys.stderr)
         return 1
-    print(overview(vault, project=args.project))
+    print(overview(vault, project=args.project, mode=args.mode))
     return 0
 
 
@@ -338,6 +366,8 @@ def main(argv: list[str] | None = None) -> int:
 
     op = sub.add_parser("overview", help="emit a markdown vault overview")
     op.add_argument("--project", help="current project name; deep-lists its notes (others appear as a name list)")
+    op.add_argument("--mode", choices=["full", "tools-and-general", "tools-only"], default="full",
+                    help="overview detail level (default: full)")
     op.set_defaults(func=_cmd_overview)
 
     args = ap.parse_args(argv)

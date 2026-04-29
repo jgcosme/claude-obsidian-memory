@@ -104,10 +104,10 @@ def check_heredoc_safe(prompt: str) -> str | None:
     return None
 
 
-def generate_overview() -> str:
+def generate_overview(mode: str = "full") -> str:
     out = subprocess.check_output(
         ["python3", str(VAULT_PY), "--vault", str(FIXTURE_VAULT),
-         "overview", "--project", FIXTURE_PROJECT],
+         "overview", "--project", FIXTURE_PROJECT, "--mode", mode],
         text=True,
     )
     if not out.strip():
@@ -246,6 +246,8 @@ def main() -> int:
     ap.add_argument("prompt_file", help="path to a candidate gate system prompt")
     ap.add_argument("--limit", type=int, default=None, help="run only N positive + N negative cases")
     ap.add_argument("--tag", default=None, help="report tag (defaults to prompt filename stem)")
+    ap.add_argument("--overview-mode", choices=["full", "tools-and-general", "tools-only"],
+                    default="full", help="vault overview mode passed to _vault.py (default: full)")
     args = ap.parse_args()
 
     if not VAULT_PY.is_file():
@@ -261,6 +263,8 @@ def main() -> int:
         return 2
     prompt = prompt_path.read_text()
     tag = args.tag or prompt_path.stem
+    if args.overview_mode != "full" and not args.tag:
+        tag = f"{tag}-{args.overview_mode}"
 
     err = check_heredoc_safe(prompt)
     if err:
@@ -268,7 +272,7 @@ def main() -> int:
         return 2
 
     cases = json.loads(CASES_FILE.read_text())
-    overview = generate_overview()
+    overview = generate_overview(args.overview_mode)
 
     n = len(cases["positive"]) + len(cases["negative"]) + len(cases["edge"])
     if args.limit:
