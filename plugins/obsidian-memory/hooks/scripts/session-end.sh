@@ -56,6 +56,7 @@ fi
 # Read event payload from stdin
 PAYLOAD=$(cat)
 TRANSCRIPT=$(echo "$PAYLOAD" | jq -r '.transcript_path // empty' 2>/dev/null || echo "")
+SESSION_ID=$(echo "$PAYLOAD" | jq -r '.session_id // empty' 2>/dev/null || echo "")
 
 PROJECT_DIR="${CLAUDE_PROJECT_DIR:-$PWD}"
 PROJECT_NAME=$(basename "$PROJECT_DIR")
@@ -161,6 +162,9 @@ export REVIEW_PROMPT
 # Background the review so the hook returns immediately. After review, autocommit
 # any vault changes (no push by default — controlled by AUTOPUSH).
 # ---------------------------------------------------------------------------
+PLUGIN_ROOT_PATH="${CLAUDE_PLUGIN_ROOT:-}"
+USAGE_LOGGER="$PLUGIN_ROOT_PATH/hooks/scripts/_usage_log.sh"
+
 nohup bash -c '
   ts() { date "+%Y-%m-%d %H:%M:%S"; }
   PROJECT_NAME='"$(printf %q "$PROJECT_NAME")"'
@@ -171,16 +175,42 @@ nohup bash -c '
   RUN_REVIEW='"$RUN_REVIEW"'
   AUTOCOMMIT='"$AUTOCOMMIT"'
   AUTOPUSH='"$AUTOPUSH"'
+  SESSION_ID='"$(printf %q "$SESSION_ID")"'
+  USAGE_LOGGER='"$(printf %q "$USAGE_LOGGER")"'
 
   if [ "$RUN_REVIEW" = "true" ]; then
     echo "[$(ts)] starting review for project=$PROJECT_NAME transcript=$TRANSCRIPT" >> "$LOG"
     # Note: --bare disables OAuth/keychain auth (see `claude --help`). We rely
     # on the recursion-guard env vars (CLAUDE_MEMORY_REVIEW=1) plus the
     # early-exit checks at the top of the hook scripts to prevent recursion.
-    CLAUDE_MEMORY_REVIEW=1 "$CLAUDE_BIN" -p "$REVIEW_PROMPT" \
-      --tools "Read,Write,Edit,Bash" \
-      >> "$LOG" 2>&1
-    echo "[$(ts)] review complete (exit=$?)" >> "$LOG"
+    #
+    # --output-format json wraps the response so we can capture real .usage
+    # and .total_cost_usd for /obsidian-memory:usage. Output goes to a temp
+    # file that is then both appended to LOG and parsed for telemetry.
+    REVIEW_OUT=$(mktemp 2>/dev/null || echo "")
+    if [ -n "$REVIEW_OUT" ]; then
+      CLAUDE_MEMORY_REVIEW=1 "$CLAUDE_BIN" -p "$REVIEW_PROMPT" \
+        --tools "Read,Write,Edit,Bash" \
+        --output-format json \
+        > "$REVIEW_OUT" 2>> "$LOG"
+      review_exit=$?
+      cat "$REVIEW_OUT" >> "$LOG"
+      echo "[$(ts)] review complete (exit=$review_exit)" >> "$LOG"
+      if [ -n "$SESSION_ID" ] && [ -x "$USAGE_LOGGER" ] && [ $review_exit -eq 0 ]; then
+        usage=$(jq -c ".[]? | select(.type==\"result\") | .usage // {}" "$REVIEW_OUT" 2>/dev/null || echo "{}")
+        cost=$(jq -r ".[]? | select(.type==\"result\") | .total_cost_usd // empty" "$REVIEW_OUT" 2>/dev/null || echo "")
+        duration=$(jq -r ".[]? | select(.type==\"result\") | .duration_ms // empty" "$REVIEW_OUT" 2>/dev/null || echo "")
+        if [ -n "$usage" ] && [ "$usage" != "null" ]; then
+          bash "$USAGE_LOGGER" api "$SESSION_ID" review_call "$usage" "$cost" "$duration" 2>>"$LOG" || true
+        fi
+      fi
+      rm -f "$REVIEW_OUT"
+    else
+      CLAUDE_MEMORY_REVIEW=1 "$CLAUDE_BIN" -p "$REVIEW_PROMPT" \
+        --tools "Read,Write,Edit,Bash" \
+        >> "$LOG" 2>&1
+      echo "[$(ts)] review complete (exit=$?, no telemetry — mktemp failed)" >> "$LOG"
+    fi
   fi
 
   if [ "$AUTOCOMMIT" = "true" ] && [ -d "$VAULT/.git" ]; then

@@ -14,6 +14,14 @@ if [ -n "${CLAUDE_MEMORY_REVIEW:-}" ] || [ -n "${CLAUDE_MEMORY_GATE:-}" ]; then
 fi
 
 # ---------------------------------------------------------------------------
+# Read stdin payload (JSON from Claude Code) — only used for the session_id we
+# need to write per-session usage events. Failure here is non-fatal: usage
+# tracking is skipped, the rest of the hook continues.
+# ---------------------------------------------------------------------------
+PAYLOAD=$(cat 2>/dev/null || true)
+SESSION_ID=$(printf '%s' "$PAYLOAD" | jq -r '.session_id // empty' 2>/dev/null || true)
+
+# ---------------------------------------------------------------------------
 # Config: load from ~/.config/claude-memory/config.env if present, else use defaults.
 # ---------------------------------------------------------------------------
 CONFIG_FILE="${HOME}/.config/claude-memory/config.env"
@@ -93,6 +101,11 @@ PROJECT_VAULT_DIR="$OBSIDIAN_VAULT_PATH/Projects/$PROJECT_NAME"
 TEMPLATE_DIR="$PLUGIN_ROOT/templates/Projects/PROJECT_NAME"
 
 # 3. Emit memory bootstrap as injected context.
+#    Wrapped in { ... } | tee so we can record the total bytes injected for
+#    /obsidian-memory:usage. tee is reliable here (vs. process substitution)
+#    because it returns only after stdin EOFs.
+USAGE_TMP=$(mktemp 2>/dev/null || echo "")
+{
 cat <<INSTRUCTIONS
 === OBSIDIAN MEMORY ===
 
@@ -185,3 +198,11 @@ Ask once: "Create memory scaffolding for project '$PROJECT_NAME'? (y/n)"
 5. Summarize files created with their sources, then address the original user request.
 EOF
 fi
+} | { if [ -n "$USAGE_TMP" ]; then tee "$USAGE_TMP"; else cat; fi; }
+
+# Record the total injected-context size for /obsidian-memory:usage.
+if [ -n "$SESSION_ID" ] && [ -n "$USAGE_TMP" ] && [ -f "$USAGE_TMP" ]; then
+  SIZE=$(wc -c < "$USAGE_TMP" 2>/dev/null | tr -d ' ' || echo 0)
+  bash "$PLUGIN_ROOT/hooks/scripts/_usage_log.sh" chars "$SESSION_ID" session_start "${SIZE:-0}" 2>/dev/null || true
+fi
+[ -n "$USAGE_TMP" ] && rm -f "$USAGE_TMP"

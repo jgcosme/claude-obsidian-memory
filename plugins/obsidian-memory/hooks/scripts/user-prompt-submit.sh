@@ -163,12 +163,33 @@ JSON only:"
 # CLAUDE_MEMORY_REVIEW=1) plus the early-exit checks at the top of the hook
 # scripts to prevent the subprocess's own SessionStart/SessionEnd/
 # UserPromptSubmit from re-firing.
-GATE_OUTPUT=$(CLAUDE_MEMORY_GATE=1 CLAUDE_MEMORY_REVIEW=1 \
+#
+# `--output-format json` returns a JSON array of events; the final `result`
+# event has both the model's text answer (`.result`) and the real `.usage`
+# block + `.total_cost_usd` we record for /obsidian-memory:usage.
+GATE_RAW=$(CLAUDE_MEMORY_GATE=1 CLAUDE_MEMORY_REVIEW=1 \
   "$CLAUDE_BIN" -p "$GATE_USER_PROMPT" \
     --system-prompt "$GATE_SYSTEM_PROMPT" \
     --tools "" \
+    --output-format json \
     2>>"$LOG")
 GATE_EXIT=$?
+
+# Unwrap the result event. If unwrap fails (older claude, malformed), fall
+# back to treating the raw output as the gate's text answer so retrieval
+# still works even if usage telemetry is lost.
+GATE_OUTPUT=$(printf '%s' "$GATE_RAW" | jq -r '.[]? | select(.type=="result") | .result // empty' 2>/dev/null || true)
+if [ -z "$GATE_OUTPUT" ]; then
+  GATE_OUTPUT="$GATE_RAW"
+  debug "gate JSON unwrap failed; using raw output"
+else
+  GATE_USAGE=$(printf '%s' "$GATE_RAW" | jq -c '.[]? | select(.type=="result") | .usage // {}' 2>/dev/null || echo '{}')
+  GATE_COST=$(printf '%s' "$GATE_RAW" | jq -r '.[]? | select(.type=="result") | .total_cost_usd // empty' 2>/dev/null || echo '')
+  GATE_DURATION=$(printf '%s' "$GATE_RAW" | jq -r '.[]? | select(.type=="result") | .duration_ms // empty' 2>/dev/null || echo '')
+  if [ -n "$SESSION_ID" ] && [ -n "$GATE_USAGE" ]; then
+    bash "$PLUGIN_ROOT/hooks/scripts/_usage_log.sh" api "$SESSION_ID" gate_call "$GATE_USAGE" "$GATE_COST" "$GATE_DURATION" 2>>"$LOG" || true
+  fi
+fi
 
 debug "gate exit=$GATE_EXIT output_len=${#GATE_OUTPUT}"
 
@@ -308,6 +329,7 @@ mark_injected() {
 }
 
 INJECTED=0
+INJECTED_PATHS=()
 DROPPED=()
 DUPED=()
 while IFS= read -r p; do
@@ -335,18 +357,41 @@ while IFS= read -r p; do
   } >> "$TMP"
   mark_injected "$p"
   INJECTED=$((INJECTED+1))
+  INJECTED_PATHS+=("$p")
 done <<< "$PATHS"
 
 [ ${#DROPPED[@]} -gt 0 ] && echo "[$(ts)] gate: dropped paths: ${DROPPED[*]}" >> "$LOG"
 [ ${#DUPED[@]} -gt 0 ] && echo "[$(ts)] gate: skipped already-injected this session: ${DUPED[*]}" >> "$LOG"
 
 if [ "$INJECTED" -gt 0 ]; then
+  # Comma-joined list of injected paths for the visible status line.
+  joined=""
+  for p in "${INJECTED_PATHS[@]}"; do
+    if [ -z "$joined" ]; then joined="$p"; else joined="$joined, $p"; fi
+  done
+
+  # Plain line on stdout — agent sees this in its injected context, and it
+  # also appears in the persisted-output preview the user sees in the UI.
+  echo ""
+  echo "[obsidian-memory] Obsidian search found $INJECTED document match$([ "$INJECTED" -eq 1 ] || echo es): $joined"
+
+  # ANSI-colored line on stderr — visible directly in the user's terminal.
+  # Bold cyan, distinct from error red.
+  printf '\033[1;36m[obsidian-memory]\033[0m \033[36mObsidian search found %d document match%s:\033[0m %s\n' \
+    "$INJECTED" "$([ "$INJECTED" -eq 1 ] || echo es)" "$joined" >&2
+
   echo ""
   echo "=== VAULT CONTEXT (auto-retrieved by memory gate) ==="
   cat "$TMP"
   echo ""
   echo "=== END VAULT CONTEXT ==="
-  echo "[$(ts)] gate: injected $INJECTED notes" >> "$LOG"
+  echo "[$(ts)] gate: injected $INJECTED notes ($joined)" >> "$LOG"
+
+  # Record injected-context size for /obsidian-memory:usage.
+  if [ -n "$SESSION_ID" ]; then
+    inject_bytes=$(wc -c < "$TMP" 2>/dev/null | tr -d ' ' || echo 0)
+    bash "$PLUGIN_ROOT/hooks/scripts/_usage_log.sh" chars "$SESSION_ID" gate_inject "${inject_bytes:-0}" 2>>"$LOG" || true
+  fi
 else
   echo "[$(ts)] gate: nothing new to inject" >> "$LOG"
 fi

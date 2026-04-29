@@ -54,6 +54,14 @@ To verify the install at any time:
 
 Reports config, vault, prereqs, plugin scripts, search smoke-test, overview cache, and the latest review/gate log lines.
 
+To see how many tokens the plugin is consuming in the current session:
+
+```text
+/obsidian-memory:usage
+```
+
+Lists per-event-kind token counts (`session_start`, `gate_inject`, `gate_call`, `review_call`) and computes the plugin's share of this session's total tokens. Multiply that share by Claude Code's `/usage` percentage to estimate the plugin's contribution to your rate-limit quota for the session.
+
 Optional — push the vault to a private GitHub remote so it follows you across machines:
 
 ```bash
@@ -138,6 +146,7 @@ Edit `~/.config/claude-memory/config.env`:
 | `MEMORY_GATE_LOG` | `/tmp/claude-memory-gate.log` | retrieval gate log |
 | `MEMORY_LOG_MAX_BYTES` | `1048576` | rotate hook logs at this size |
 | `MEMORY_OVERVIEW_CACHE_DIR` | `/tmp/claude-memory-overview-cache` | shared overview cache (mtime-invalidated) |
+| `MEMORY_USAGE_DIR` | `/tmp/claude-memory-usage` | per-session token-usage JSONL logs read by `/obsidian-memory:usage` |
 
 ## Secrets
 
@@ -177,6 +186,27 @@ Anthropic's prompt cache amortizes the static portion (overview in `--system-pro
 
 `SessionEnd` review and auto-commit run **in the background** — no shell wait time.
 
+When the gate decides to inject vault notes for a turn, it prints a single status line so you can see retrieval at work:
+
+```text
+[obsidian-memory] Obsidian search found 2 document matches: Tools/Slack.md, General/References/secrets-env.md
+```
+
+Bold cyan on stderr (terminal-visible) and a plain copy on stdout (so the agent's context shows it too).
+
+## Token telemetry
+
+Both `claude -p` calls (the gate and the SessionEnd review) use `--output-format json` and capture exact `usage` from the API response. Every hook also logs the size of any text it injects into your main session. The four event kinds:
+
+| Event | Source | What it costs |
+|---|---|---|
+| `session_start` | `SessionStart` hook stdout | text appended to your context once at session start; re-sent on every subsequent turn (mostly cache_read after the first) |
+| `gate_inject` | retrieved vault notes appended to a turn | text added to your input on that turn; re-sent on every turn after |
+| `gate_call` | `claude -p` for the retrieval gate, every UserPromptSubmit | one separate API call against your rate limit |
+| `review_call` | `claude -p` for the SessionEnd review | one separate API call (typically large because it processes the full transcript) |
+
+Events are appended to `/tmp/claude-memory-usage/<session_id>.jsonl`. `/obsidian-memory:usage` reads the current session's file, joins it against the main-session transcript at `~/.claude/projects/<encoded-cwd>/<session_id>.jsonl`, and prints a per-kind breakdown plus a `Session share` line.
+
 ## Documentation
 
 - [HOW-IT-WORKS.md](./HOW-IT-WORKS.md) — hook lifecycle, retrieval gate internals, routing rules, project scaffolding
@@ -196,7 +226,7 @@ For full cleanup (data, config, logs):
 rm -rf "$HOME/Documents/Obsidian Vault"
 rm -rf "$HOME/.config/claude-memory"
 rm -f /tmp/claude-memory-review.log{,.1} /tmp/claude-memory-gate.log{,.1}
-rm -rf /tmp/claude-memory-gate-state
+rm -rf /tmp/claude-memory-gate-state /tmp/claude-memory-usage
 ```
 
 ## License
