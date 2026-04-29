@@ -131,12 +131,8 @@ cat <<INSTRUCTIONS
 Vault: $OBSIDIAN_VAULT_PATH
 Index: the auto-overview below — regenerated each session from frontmatter.
 
-RECALL — read by path or query:
-  Read tool                     "$OBSIDIAN_VAULT_PATH/<path>"
-  Python search CLI             python3 "$PLUGIN_ROOT/scripts/_vault.py" search --type <t> --keywords <k> --path-prefix <p> [--created-after YYYY-MM-DD]
-  Obsidian search (if running)  obsidian search query="[type:decision] keywords"
-
-REMEMBER — invoke the \`save-memory\` skill to write notes. It handles when-to-save, routing, and frontmatter. Verify paths and function names before recommending — they drift.
+RECALL — invoke the \`vault-search\` skill for body-level lookups (the gate above only matches descriptions).
+REMEMBER — invoke the \`save-memory\` skill to write notes.
 
 INSTRUCTIONS
 

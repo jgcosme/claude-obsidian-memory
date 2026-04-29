@@ -1,0 +1,39 @@
+{
+  "_comment": "Bucket-labeled cases for save-skill specialization eval. bucket ∈ {tool, general, project, null}. null = trivial negative, no save expected. Cases are synthetic — no real project names, people, or credentials.",
+  "cases": [
+    {"bucket": "tool", "msg": "I just installed gh CLI and authed with my PAT — config at ~/.config/gh/hosts.yml"},
+    {"bucket": "tool", "msg": "set up gws — auth file is ~/.config/gws/auth.json, account user@example.com, project example-org-dev"},
+    {"bucket": "tool", "msg": "obsidian CLI lives at /Applications/Obsidian.app/Contents/MacOS/obsidian and requires Obsidian.app to be running"},
+    {"bucket": "tool", "msg": "configured jq with --raw-output as default via shell alias jqr"},
+    {"bucket": "tool", "msg": "got slack working — user token saved at ~/.config/claude-memory/secrets.env, scopes channels:history,chat:write"},
+    {"bucket": "tool", "msg": "installed direnv globally — .envrc files now auto-load via shell hook"},
+
+    {"bucket": "general", "msg": "from now on don't use mocks in integration tests — we got burned last quarter when mocked tests passed but the prod migration failed"},
+    {"bucket": "general", "msg": "always prefer Sonnet over Haiku for the gate — Haiku misses the guardrail categories"},
+    {"bucket": "general", "msg": "stop summarizing what you just did at the end of every response — I can read the diff"},
+    {"bucket": "general", "msg": "remember: secrets pattern is ~/.config/claude-memory/secrets.env (chmod 600), vault notes only reference variable names"},
+    {"bucket": "general", "msg": "Alex is the infra lead on example-project — DM for VPN / cluster questions"},
+    {"bucket": "general", "msg": "remember: the GROUP_ID for our slack workspace is T0123456ABC"},
+
+    {"bucket": "project", "msg": "we decided against using cron for the cleanup job — queue worker instead, after the Q1 incident"},
+    {"bucket": "project", "msg": "just learned that --strict-mcp-config drops gate token use by ~73%, save this"},
+    {"bucket": "project", "msg": "yeah the bundled-PR approach was the right call here, splitting would have been churn"},
+    {"bucket": "project", "msg": "the example-project migration deadline is May 15 — committed to client today"},
+    {"bucket": "project", "msg": "found out the planner service silently drops messages over 8KB; needs explicit chunking"},
+    {"bucket": "project", "msg": "for example-project, all upstream DB connections must go through the runner bastion — direct VPN access is unreliable"},
+
+    {"bucket": null, "msg": "thanks!"},
+    {"bucket": null, "msg": "yes"},
+    {"bucket": null, "msg": "ok go ahead"},
+    {"bucket": null, "msg": "fix the typo on line 12"},
+    {"bucket": null, "msg": "rename foo to bar"},
+    {"bucket": null, "msg": "what's 2+2?"},
+    {"bucket": null, "msg": "ls the current directory"},
+    {"bucket": null, "msg": "rewrite this function with better naming"},
+    {"bucket": null, "msg": "actually nevermind"},
+    {"bucket": null, "msg": "lol"},
+    {"bucket": null, "msg": "commit and push the changes"},
+    {"bucket": null, "msg": "explain how transformers work"},
+    {"bucket": null, "msg": "write a python function to reverse a string"}
+  ]
+}

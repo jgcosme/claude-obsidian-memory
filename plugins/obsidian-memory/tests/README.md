@@ -49,7 +49,7 @@ Reports land at `report-current-<mode>.md` so they don't clobber the baseline.
 
 ## Write-trigger evaluation
 
-`run_write_eval.py` benchmarks a candidate "should I save this as a memory note?" prompt against `cases-write.json`. Used to compare hook-mode (SessionEnd review) against skill-mode (the `save-memory` skill description) on the same fixture set.
+`run_write_eval.py` benchmarks a candidate "should I save this as a memory note?" prompt against a cases file (default: `cases-write.json`). Used to compare hook-mode (SessionEnd review) against skill-mode (the `save-memory` skill description) on the same fixture set.
 
 ### Run
 
@@ -61,41 +61,82 @@ python3 tests/run_write_eval.py tests/prompts/write-hook.txt --tag hook
 python3 tests/run_write_eval.py tests/prompts/write-skill.txt --tag skill
 ```
 
+The harness also accepts `--cases <file>` to swap fixtures — used by the search-trigger comparison below.
+
 Reports land at `tests/prompts/report-write-<tag>.md`. Each run is ~21 calls (~$0.03–0.10).
 
 ### Fixture cases
 
 `cases-write.json` is a deliberately small set of single-turn user messages — 8 positive (corrections, preferences, novel facts, "remember this") and 13 negative (greetings, refactors, generic questions). Single-turn means both modes see exactly the same input, no transcript-context advantage for the hook.
 
+## Search-trigger evaluation (skill vs inline)
+
+`run_write_eval.py` is reused with `--cases tests/cases-search.json` and the `search-*.txt` prompts to settle whether a vault-search skill triggers more reliably than the previous inline RECALL block in `session-start.sh`.
+
+### Run
+
+```bash
+# Inline-RECALL baseline (the pre-1.5.5 ambient documentation approach)
+python3 tests/run_write_eval.py tests/prompts/search-inline-recall.txt --tag search-inline --cases tests/cases-search.json
+
+# Skill candidate (matches skills/vault-search/SKILL.md description)
+python3 tests/run_write_eval.py tests/prompts/search-skill.txt --tag search-skill --cases tests/cases-search.json
+```
+
+`cases-search.json` is derived from `cases.json` by stripping `expect_any_of` — same 51 cases (27 positive + 24 negative), but the question becomes binary "should you reach for vault search?" rather than "what to retrieve?". Result on shipping: skill 89% recall vs inline 37% recall, both at 92% neg_acc — see commit messages around v1.5.5.
+
+## Bucket-routing evaluation (specialization experiment)
+
+`run_bucket_eval.py` tests whether splitting `save-memory` into specialized skills (`save-tool`, `save-general`, `save-project`) improves recall/precision over the single umbrella description. Spoiler: it doesn't — system recall and neg_acc tie at 100%, but ~50% of positives multi-fire across specialized skills, and the description budget grows 2.5×. Kept in tree as the artifact that settled the architecture question.
+
+```bash
+python3 tests/run_bucket_eval.py \
+  --umbrella tests/prompts/write-skill.txt \
+  --tool     tests/prompts/save-tool.txt \
+  --general  tests/prompts/save-general.txt \
+  --project  tests/prompts/save-project.txt \
+  --cases    tests/cases-bucket.json
+```
+
+`cases-bucket.json` has 18 bucket-labeled positives (6 each in tool/general/project) + 13 trivial negatives. Synthetic — no real project names, people, or credentials.
+
 ### Comparison vs gate eval
 
-The two harnesses are **independent and non-overlapping**:
+The harnesses are **independent and non-overlapping**:
 
-| | `run_gate_eval.py` | `run_write_eval.py` |
-|---|---|---|
-| Cases file | `cases.json` | `cases-write.json` |
-| Question | "what to retrieve?" | "should I save?" |
-| Output shape | `{"read": [...], "search": [...]}` | `{"save": bool, "kind": ...}` |
-| Reports | `report-<tag>.md` | `report-write-<tag>.md` |
+| | `run_gate_eval.py` | `run_write_eval.py` | `run_bucket_eval.py` |
+|---|---|---|---|
+| Cases file | `cases.json` | `cases-write.json` (default) or `cases-search.json` | `cases-bucket.json` |
+| Question | "what to retrieve?" | "should I save / search?" (binary) | "which specialized skill should fire?" |
+| Output shape | `{"read": [...], "search": [...]}` | `{"save": bool, "kind": ...}` | per-skill `{"save": bool}`, aggregated |
+| Reports | `report-<tag>.md` | `report-write-<tag>.md` | `report-bucket-eval.md` |
 
-Both are gitignored at the report level (`tests/.gitignore: report-*.md`).
+All gitignored at the report level (`tests/.gitignore: report-*.md`).
 
 ### Layout
 
 ```
 tests/
 ├── README.md
-├── run_gate_eval.py         # retrieval harness
-├── run_write_eval.py        # write-trigger harness
-├── cases.json               # 16 positive + 22 negative + 4 edge (retrieval)
-├── cases-write.json         # 8 positive + 13 negative (write-trigger)
+├── run_gate_eval.py            # retrieval harness
+├── run_write_eval.py           # write/search-trigger harness (--cases <file>)
+├── run_bucket_eval.py          # specialization experiment harness
+├── cases.json                  # 27 positive + 24 negative + 4 edge (retrieval)
+├── cases-write.json            # 8 positive + 13 negative (write-trigger)
+├── cases-search.json           # derived from cases.json (search-trigger)
+├── cases-bucket.json           # 18 bucket-labeled + 13 negatives (specialization)
 ├── prompts/
-│   ├── current.txt          # mirrors gate prompt in user-prompt-submit.sh
-│   ├── skill-style.txt      # alt: skill-style retrieval (eval-only, not shipped)
-│   ├── write-hook.txt       # mirrors session-end.sh proactive-notes clause
-│   └── write-skill.txt      # mirrors skills/save-memory/SKILL.md description
+│   ├── current.txt             # mirrors gate prompt in user-prompt-submit.sh
+│   ├── skill-style.txt         # alt: skill-style retrieval (eval-only, not shipped)
+│   ├── write-hook.txt          # mirrors session-end.sh proactive-notes clause
+│   ├── write-skill.txt         # mirrors skills/save-memory/SKILL.md description
+│   ├── search-inline-recall.txt # pre-1.5.5 inline RECALL baseline
+│   ├── search-skill.txt        # mirrors skills/vault-search/SKILL.md description
+│   ├── save-tool.txt           # specialized save-tool description (eval-only)
+│   ├── save-general.txt        # specialized save-general description (eval-only)
+│   └── save-project.txt        # specialized save-project description (eval-only)
 └── fixtures/
-    └── vault/               # synthetic vault the gate sees
+    └── vault/                  # synthetic vault the gate sees
 ```
 
 ### Heredoc safety pre-flight

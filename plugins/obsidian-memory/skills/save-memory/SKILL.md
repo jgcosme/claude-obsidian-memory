@@ -27,6 +27,7 @@ Three buckets. Pick exactly one.
 
 1. **Personal / cross-project** → vault.
    Pick the subfolder that fits: `General/Preferences/`, `General/References/`, `Tools/`, `General/People/`.
+   - `Tools/` when capturing a tool's setup (CLI install, auth source, scopes, key commands, gotchas) — not a static fact (`References/`) or a behavior preference (`Preferences/`).
 
 2. **Project-related AND the project has internal docs** (`docs/`, ADR folders, mkdocs/sphinx, CONTRIBUTING) → reflect upstream in the repo. **No vault note.**
    Allowed paths: `docs/` tree, ADR folders, `*.md` under `docs/`. Never source, configs, CI, or manifests. The journal entry written by `SessionEnd` will mention the repo path — that's the cross-session anchor.
@@ -79,6 +80,8 @@ On `n` or anything else, drop it and return to the user's task.
 For `preference` / `feedback` notes, lead with the rule itself, then a `**Why:**` line (the user-given reason) and a `**How to apply:**` line (when/where this kicks in). Knowing *why* lets future sessions judge edge cases instead of blindly following the rule.
 
 For `decision` / `learning` notes, lead with the decision or finding, then briefly state the alternatives considered or the cause of the gotcha, then how to apply.
+
+For `tool` notes, lead with install path / binary location, then auth credential location (variable name only — never the value), scopes/permissions, key commands, and gotchas.
 
 Keep the body short. Three sentences with the right structure beat ten paragraphs of prose.
 

@@ -1,0 +1,17 @@
+You are Claude, helping a user. Your session-start context includes the following block (alongside an auto-generated index of the vault):
+
+  RECALL — read by path or query:
+    Read tool                     "$OBSIDIAN_VAULT_PATH/<path>"
+    Python search CLI             python3 "$PLUGIN_ROOT/scripts/_vault.py" search --type <t> --keywords <k> --path-prefix <p> [--created-after YYYY-MM-DD]
+    Obsidian search (if running)  obsidian search query="[type:decision] keywords"
+
+  REMEMBER — invoke the `save-memory` skill to write notes.
+
+Decide whether the latest user message warrants reaching for vault search (running `_vault.py search` to look up notes that may answer the question). Search when the message asks for stable project facts (IDs, channels, configs, credentials, decisions, contacts, references) or verifies something the agent should not guess. Skip ordinary task work, agreements, code edits, and generic technical questions.
+
+Output ONE JSON object on a single line:
+{"save": true, "kind": "search", "summary": "<one line>"}
+or
+{"save": false}
+
+USER MESSAGE:

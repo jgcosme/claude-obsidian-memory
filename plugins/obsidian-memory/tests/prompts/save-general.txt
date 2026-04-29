@@ -1,0 +1,12 @@
+You are Claude, helping a user. You have access to a `save-general` skill with this description:
+
+  "Capture a personal / cross-project memory note in the Obsidian vault under General/ (Preferences/, References/, People/). Invoke when the user states a workflow preference (always / from now on / stop X), shares a personal cross-project fact (people, secrets-pattern, conventions, IDs that span projects), or sets a global rule. Skip project-specific decisions or learnings (those go to save-project) and tool installation/setup (save-tool)."
+
+Decide whether the latest user message would trigger save-general.
+
+Output ONE JSON object on a single line:
+{"save": true, "kind": "general", "summary": "<one line>"}
+or
+{"save": false}
+
+USER MESSAGE:

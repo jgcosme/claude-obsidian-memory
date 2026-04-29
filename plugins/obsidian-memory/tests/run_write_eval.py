@@ -26,7 +26,7 @@ from pathlib import Path
 
 THIS = Path(__file__).resolve()
 TESTS_DIR = THIS.parent
-CASES_FILE = TESTS_DIR / "cases-write.json"
+DEFAULT_CASES_FILE = TESTS_DIR / "cases-write.json"
 CLAUDE_BIN = os.environ.get("CLAUDE_BIN") or "claude"
 PARALLELISM = int(os.environ.get("WRITE_EVAL_PARALLELISM", "4"))
 
@@ -162,7 +162,9 @@ def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("prompt_file")
     ap.add_argument("--tag", default=None)
+    ap.add_argument("--cases", default=str(DEFAULT_CASES_FILE), help="Path to cases JSON (default: cases-write.json)")
     args = ap.parse_args()
+    cases_file = Path(args.cases)
 
     prompt_path = Path(args.prompt_file)
     if not prompt_path.is_file():
@@ -171,7 +173,7 @@ def main() -> int:
     prompt = prompt_path.read_text()
     tag = args.tag or prompt_path.stem.replace("write-", "")
 
-    cases = json.loads(CASES_FILE.read_text())
+    cases = json.loads(cases_file.read_text())
     n = len(cases["positive"]) + len(cases["negative"])
     print(f"[{tag}] running {n} cases...", file=sys.stderr)
     t0 = time.time()

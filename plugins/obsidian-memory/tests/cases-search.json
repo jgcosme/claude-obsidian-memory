@@ -1,0 +1,160 @@
+{
+  "_comment": "Search-trigger cases derived from cases.json. Positives = retrieval expected; negatives = no retrieval.",
+  "positive": [
+    {
+      "msg": "remind me of the secrets pattern"
+    },
+    {
+      "msg": "what was decided about hooks vs CLAUDE.md autoload?"
+    },
+    {
+      "msg": "show me the slack tool docs"
+    },
+    {
+      "msg": "how do I use the gws CLI?"
+    },
+    {
+      "msg": "what's the github repo for the obsidian vault?"
+    },
+    {
+      "msg": "what's in my user profile note?"
+    },
+    {
+      "msg": "what was that gotcha about claude -p --bare?"
+    },
+    {
+      "msg": "what's the issue with $CLAUDE_PLUGIN_ROOT in slash commands?"
+    },
+    {
+      "msg": "what did we learn about session 1 scaffolding?"
+    },
+    {
+      "msg": "what's the convention for importing external docs into the vault?"
+    },
+    {
+      "msg": "show me yesterday's journal"
+    },
+    {
+      "msg": "what learnings have I captured recently?"
+    },
+    {
+      "msg": "what's the overview of the current project?"
+    },
+    {
+      "msg": "thanks! also remind me about the slack token"
+    },
+    {
+      "msg": "I forgot the rule about how we organize external doc imports"
+    },
+    {
+      "msg": "what's in the other-project-a project?"
+    },
+    {
+      "msg": "the gate keeps failing with 'Not logged in' on subprocess calls"
+    },
+    {
+      "msg": "the auto-overview is missing notes for the project I just scaffolded"
+    },
+    {
+      "msg": "send a message to #engineering that the deploy is done"
+    },
+    {
+      "msg": "put a 30-minute hold on my calendar tomorrow at 2pm"
+    },
+    {
+      "msg": "this hook setup feels like a lot of moving parts \u2014 couldn't we just put the index in CLAUDE.md?"
+    },
+    {
+      "msg": "what's the best way to bootstrap memory in a Claude Code session for this project?"
+    },
+    {
+      "msg": "where are we on example-project?"
+    },
+    {
+      "msg": "write tests for the new gate handler"
+    },
+    {
+      "msg": "add the slack token directly to Tools/Slack.md"
+    },
+    {
+      "msg": "add --bare to the gate subprocess for cleaner logs"
+    },
+    {
+      "msg": "import everything from /Users/me/old-project/docs into the vault"
+    }
+  ],
+  "negative": [
+    {
+      "msg": "thanks!"
+    },
+    {
+      "msg": "ok"
+    },
+    {
+      "msg": "yes"
+    },
+    {
+      "msg": "no, that's fine"
+    },
+    {
+      "msg": "fix the typo on line 12"
+    },
+    {
+      "msg": "how would you tune the gate prompt?"
+    },
+    {
+      "msg": "what's 2+2?"
+    },
+    {
+      "msg": "write a python function to reverse a string"
+    },
+    {
+      "msg": "explain how transformers work"
+    },
+    {
+      "msg": "what's the weather in Tokyo?"
+    },
+    {
+      "msg": "ls the current directory"
+    },
+    {
+      "msg": "go ahead"
+    },
+    {
+      "msg": "lol"
+    },
+    {
+      "msg": "actually nevermind"
+    },
+    {
+      "msg": "commit and push the changes"
+    },
+    {
+      "msg": "rename the variable foo to bar"
+    },
+    {
+      "msg": "what does this regex do: ^[a-z]+$"
+    },
+    {
+      "msg": "what did we decide about kubernetes?"
+    },
+    {
+      "msg": "example-project is a cool name"
+    },
+    {
+      "msg": "what would we decide if we needed to add auth from scratch?"
+    },
+    {
+      "msg": "delete the secrets-env note"
+    },
+    {
+      "msg": "rewrite the gate prompt to be more concise"
+    },
+    {
+      "msg": "add a colors module to the project"
+    },
+    {
+      "msg": "draft a function that returns the current date"
+    }
+  ]
+}
