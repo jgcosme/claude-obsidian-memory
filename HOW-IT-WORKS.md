@@ -45,7 +45,7 @@ Total injection is typically 3–8 KB depending on vault size.
 
 ## `vault-search` skill (in-session reads)
 
-`skills/vault-search/SKILL.md` is an auto-invoked skill that handles the body-anchored reactive lookup the gate can't do. The retrieval gate above matches the user prompt against the auto-overview, which contains note **descriptions** only — note bodies are never sent. So a query whose only anchor lives in a note body (e.g., a Bitwarden link captured in `db-access.md`'s body, where the description doesn't mention "Bitwarden") will silently miss the gate.
+`skills/vault-search/SKILL.md` is an auto-invoked skill the agent reaches for when the conversation needs project facts (IDs, channels, configs, credentials), troubleshooting context, or external-tool setup. Its trigger is the agent's information need, not the gate's outcome — the two run independently. The skill's *value*, separate from its trigger, is that it searches note **bodies**: the retrieval gate above matches against note **descriptions** only, so a query whose only anchor lives in a note body (e.g., a Bitwarden link captured in `db-access.md`'s body, where the description doesn't mention "Bitwarden") silently misses the gate. The skill closes that recall gap when the agent realizes a lookup is needed.
 
 When Claude invokes `vault-search`, the body provides the `_vault.py search` CLI syntax, decision shape (direct lookup vs troubleshooting vs tool setup vs project decision), and verification guidance (paths drift between sessions; re-read before recommending).
 

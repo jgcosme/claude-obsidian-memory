@@ -10,8 +10,8 @@ Claude Code's per-project auto-memory (`~/.claude/projects/*/memory/`) is siloed
 - **Frontmatter as source of truth.** Every note declares `type`, `description`, `created` (and `project` when scoped). The plugin writes those fields automatically and derives everything else (recall, summaries, audits) from them — no index to maintain.
 - **Git-tracked.** Every memory write is a diff. Auto-commit on by default; auto-push opt-in.
 - **Obsidian-friendly, not Obsidian-required.** The vault is just markdown — search runs in pure Python. Obsidian.app adds a UI but no plugin-required functionality.
-- **Three lifecycle hooks + two skills.** `SessionStart` loads context, `UserPromptSubmit` retrieves relevant notes per turn (description-anchored, proactive), and two in-session skills handle reads and writes the gate can't catch:
-  - **`vault-search`** — body-anchored reactive lookup. Invoked when the conversation needs a project fact, troubleshoots a symptom, or sets up an external tool the gate's description-match missed (e.g., a credential whose location lives in a note body).
+- **Three lifecycle hooks + two skills.** `SessionStart` loads context, `UserPromptSubmit` runs a proactive retrieval gate (description-anchored), and two agent-driven skills cover reads and writes:
+  - **`vault-search`** — agent-driven vault lookup. Invoked when the conversation needs project facts (IDs, channels, configs, credentials), troubleshooting context, or external-tool setup. Complementary to the gate: the gate matches against note descriptions only; this skill searches body content the gate doesn't see.
   - **`save-memory`** — captures stable cross-session information regardless of source (user-stated or tool-discovered): corrections, preferences, decisions and rationale, novel facts (people, IDs, configs, channels, dashboards, endpoints).
 
   `SessionEnd` writes the journal entry and backstops anything the skills missed (dedup-by-search, integrity check, auto-commit).
