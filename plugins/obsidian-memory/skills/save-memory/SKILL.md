@@ -1,5 +1,5 @@
 ---
-description: Capture an in-session memory note to the user's Obsidian vault. Invoke when the user makes a correction worth remembering across sessions, validates a non-obvious approach, sets a preference ("from now on...", "always...", "stop doing X"), explicitly asks to remember something, or shares a novel cross-session fact (config detail, person, ID, GROUP_ID). Skip ordinary task instructions, agreements ("ok", "thanks"), ephemeral edits, refactors, and generic technical questions.
+description: Capture an in-session memory note to the Obsidian vault. Invoke whenever the conversation surfaces information that is stable across sessions, useful in future sessions, and not derivable from the codebase or git history — regardless of source (user-stated or tool-discovered). Covers corrections, preferences, validated approaches, always / from now on / stop doing X rules, decisions and rationale, and novel facts (people, IDs, configs, channels, dashboards, endpoints). Skip agreements (ok, thanks), in-progress task state, and anything visible in the diff.
 ---
 
 # save-memory

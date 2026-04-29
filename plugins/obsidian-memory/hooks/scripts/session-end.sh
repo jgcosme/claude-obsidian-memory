@@ -155,7 +155,7 @@ Vault HEAD at session start: __VAULT_HEAD_DISPLAY__
 
 Do steps 1-3 first. Step 4 (the journal) is written last so its bullets can reference everything you wrote.
 
-1. PROACTIVE NOTES — for save-worthy moments in the transcript (corrections, decisions, validated approaches, novel facts, "remember this"). Skip if not useful in future sessions, or already covered (verify via `python3 __PLUGIN_ROOT__/scripts/_vault.py --vault __VAULT__ search --type <t> --keywords <k> --json`; extend a near-duplicate rather than creating a new note).
+1. PROACTIVE NOTES — capture moments in the transcript where information surfaces that is stable across sessions, useful in future sessions, and not derivable from the codebase or git history. Covers corrections, preferences, validated approaches, always / from now on / stop doing X rules, decisions and rationale, and novel facts (people, IDs, configs, channels, dashboards, endpoints). Skip if already covered (verify via `python3 __PLUGIN_ROOT__/scripts/_vault.py --vault __VAULT__ search --type <t> --keywords <k> --json`; extend a near-duplicate rather than creating a new note).
 
    Three buckets. Pick exactly one per candidate:
 

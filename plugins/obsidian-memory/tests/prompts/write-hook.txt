@@ -3,9 +3,12 @@ End-of-session memory review (single-message mode).
 You are reviewing the most recent user message from a session and deciding whether to save a proactive memory note. The full transcript is not available — make the call based on this message alone.
 
 Write a note when ALL hold:
-- Significant: correction, decision, validated approach, novel fact, "remember this"
-- Useful in future sessions
+- Surfaces information that is stable across sessions and useful in future ones
+- Not derivable from the codebase or git history
 - Not already covered (assume the vault is small enough that you have not yet captured this)
+
+In scope: corrections, preferences, validated approaches, always / from now on / stop doing X rules, decisions and rationale, novel facts (people, IDs, configs, channels, dashboards, endpoints).
+Out of scope: agreements (ok, thanks), in-progress task state, and anything visible in the diff.
 
 Output ONE JSON object on a single line:
 {"save": true, "kind": "<decision|learning|preference|reference|feedback>", "summary": "<one line>"}

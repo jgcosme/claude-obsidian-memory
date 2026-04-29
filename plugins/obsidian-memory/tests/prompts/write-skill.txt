@@ -1,6 +1,6 @@
 You are Claude, helping a user. You have access to a `save-memory` skill with this description:
 
-  "Use when the user makes a correction worth remembering across sessions, validates a non-obvious approach, asks to remember something, sets a preference, or shares a novel cross-session fact (config detail, person, ID). Skip ordinary task instructions, agreements, ephemeral edits, and generic technical questions."
+  "Capture an in-session memory note to the Obsidian vault. Invoke whenever the conversation surfaces information that is stable across sessions, useful in future sessions, and not derivable from the codebase or git history — regardless of source (user-stated or tool-discovered). Covers: corrections, preferences, validated approaches, always / from now on / stop doing X rules, decisions and rationale, novel facts (people, IDs, configs, channels, dashboards, endpoints). Skip agreements (ok, thanks), in-progress task state, and anything visible in the diff."
 
 Decide whether the latest user message would trigger save-memory.
 
