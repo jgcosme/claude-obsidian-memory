@@ -79,6 +79,49 @@ def _is_boilerplate(rel_path: Path) -> bool:
     return False
 
 
+# Common repo-folder names per memory type, lowercase. Order doesn't matter —
+# match is on existence, not preference. Types not listed here (preference,
+# tool, journal) never have a matching repo folder; their writes always
+# route to the personal vault.
+TYPE_FOLDER_PATTERNS: dict[str, tuple[str, ...]] = {
+    "decision": ("decisions", "adr", "decision-records"),
+    "learning": ("learnings", "lessons"),
+    "reference": ("references",),
+}
+
+
+def match_type_folder(repo_path: Path | str, type_: str) -> Path | None:
+    """Find a folder in the repo matching the given memory type.
+
+    Looks at:
+      1. Top-level dirs in the repo
+      2. Dirs immediately under docs/
+
+    Match is case-insensitive on the directory's basename. Returns the
+    absolute path to the first matching folder, or None if no match.
+    Used by save-memory's bucket-2 routing to decide whether a write goes
+    to the repo-vault (matching folder exists) or the personal vault
+    Notes/ (no match).
+    """
+    patterns = TYPE_FOLDER_PATTERNS.get(type_, ())
+    if not patterns:
+        return None
+    repo = Path(repo_path).expanduser().resolve()
+    if not repo.is_dir():
+        return None
+    for tier_root in (repo, repo / "docs"):
+        if not tier_root.is_dir():
+            continue
+        try:
+            entries = sorted(tier_root.iterdir())
+        except OSError:
+            continue
+        for entry in entries:
+            if entry.is_dir() and entry.name.lower() in patterns:
+                return entry
+    return None
+
+
 def enumerate_repo_docs(repo_path: Path | str) -> list[Path]:
     """Return absolute paths of .md files in the repo's vault corpus.
 
@@ -122,6 +165,22 @@ def _cmd_enumerate(args: argparse.Namespace) -> int:
     return 0
 
 
+def _cmd_match_type_folder(args: argparse.Namespace) -> int:
+    repo = Path(args.repo_path).expanduser().resolve()
+    folder = match_type_folder(repo, args.type)
+    if folder is None:
+        if args.json:
+            print(json.dumps({"matched": False, "type": args.type}))
+        # Empty stdout + non-zero is a clear "no match" signal for shell consumers.
+        return 1
+    rel = folder.relative_to(repo)
+    if args.json:
+        print(json.dumps({"matched": True, "type": args.type, "path": str(rel)}))
+    else:
+        print(rel)
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(
         description=__doc__,
@@ -133,6 +192,15 @@ def main(argv: list[str] | None = None) -> int:
     ep.add_argument("repo_path", help="path to the project repo")
     ep.add_argument("--json", action="store_true", help="emit JSON array")
     ep.set_defaults(func=_cmd_enumerate)
+
+    mp = sub.add_parser("match-type-folder",
+                        help="find a repo folder matching a memory type (decision/learning/reference)")
+    mp.add_argument("repo_path", help="path to the project repo")
+    mp.add_argument("--type", required=True,
+                    choices=("decision", "learning", "reference", "preference", "tool", "journal"),
+                    help="memory type to match")
+    mp.add_argument("--json", action="store_true", help="emit JSON result")
+    mp.set_defaults(func=_cmd_match_type_folder)
 
     args = ap.parse_args(argv)
     return args.func(args)
