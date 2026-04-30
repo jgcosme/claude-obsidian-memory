@@ -34,7 +34,7 @@ try:
 except ImportError:
     _HAS_YAML = False
 
-# Shared module: parse_frontmatter, collect_md_files, resolve_vault, FRONTMATTER_RE
+# Shared modules
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from _vault import (  # noqa: E402
     FRONTMATTER_RE,
@@ -42,6 +42,7 @@ from _vault import (  # noqa: E402
     parse_frontmatter,
     resolve_vault,
 )
+from _repo_docs import enumerate_repo_docs  # noqa: E402
 
 WIKILINK_RE = re.compile(r"\[\[([^\]]+)\]\]")
 
@@ -102,30 +103,24 @@ def resolve_wikilink(
     return []
 
 
-def main() -> int:
-    ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("--vault", help="path to Obsidian vault (overrides config)")
-    ap.add_argument("--json", action="store_true", help="emit JSON instead of markdown")
-    args = ap.parse_args()
+def _audit_corpus(label: str, root: Path, files: list[Path], *, project_required: bool) -> dict:
+    """Run integrity checks against a single corpus.
 
-    vault = resolve_vault(args.vault)
-    if not vault.is_dir():
-        print(f"vault not found at: {vault}", file=sys.stderr)
-        return 1
-
-    md_files = collect_md_files(vault)
-
+    project_required: when True, every note must have `project:` (used for
+    repo-vault corpora where save-memory always sets it). When False, only
+    notes under `Projects/` need it (the personal-vault legacy convention).
+    """
     basename_map: dict[str, list[Path]] = {}
-    for f in md_files:
+    for f in files:
         basename_map.setdefault(f.stem, []).append(f)
-    all_relpaths: list[Path] = [f.relative_to(vault) for f in md_files]
+    all_relpaths: list[Path] = [f.relative_to(root) for f in files]
 
     fm_issues: list[dict] = []
     broken_links: list[dict] = []
     referenced: set[Path] = set()
 
-    for f in md_files:
-        rel = f.relative_to(vault)
+    for f in files:
+        rel = f.relative_to(root)
         try:
             text = f.read_text(encoding="utf-8")
         except UnicodeDecodeError:
@@ -133,21 +128,17 @@ def main() -> int:
             continue
 
         fm = parse_frontmatter(text)
-        # README files are navigation/prose and don't need frontmatter.
         if f.name in NAVIGATION_NAMES:
             pass
         elif fm is None:
             fm_issues.append({"file": str(rel), "issue": "no frontmatter block"})
         else:
             required = ["type", "description", "created"]
-            if str(rel).startswith("Projects/"):
+            if project_required or str(rel).startswith("Projects/"):
                 required.append("project")
             for k in required:
                 if k not in fm:
                     fm_issues.append({"file": str(rel), "issue": f"missing `{k}`"})
-            # Strict YAML validation — _vault.parse_frontmatter is intentionally
-            # lenient (line-split on first `:`), which silently truncates values
-            # containing `: ` like "description: AM: did X". Catch those here.
             if _HAS_YAML:
                 m = FRONTMATTER_RE.match(text)
                 if m is not None:
@@ -159,78 +150,69 @@ def main() -> int:
 
         body = FRONTMATTER_RE.sub("", text, count=1)
         for target in extract_wikilinks(body):
-            resolved = resolve_wikilink(target, vault, basename_map, f, all_relpaths)
+            resolved = resolve_wikilink(target, root, basename_map, f, all_relpaths)
             if not resolved:
                 broken_links.append({"file": str(rel), "link": target})
             else:
                 for r in resolved:
-                    referenced.add(vault / r)
+                    referenced.add(root / r)
 
     orphans: list[str] = []
-    for f in md_files:
+    for f in files:
         if f.name in NAVIGATION_NAMES:
             continue
         if f not in referenced:
-            orphans.append(str(f.relative_to(vault)))
+            orphans.append(str(f.relative_to(root)))
 
     duplicate_basenames: list[dict] = []
     for stem, paths in basename_map.items():
         if len(paths) > 1:
             duplicate_basenames.append({
                 "basename": f"{stem}.md",
-                "paths": [str(p.relative_to(vault)) for p in paths],
+                "paths": [str(p.relative_to(root)) for p in paths],
             })
 
-    if args.json:
-        print(json.dumps({
-            "vault": str(vault),
-            "generated": datetime.now().isoformat(timespec="seconds"),
-            "counts": {
-                "files_scanned": len(md_files),
-                "frontmatter_issues": len(fm_issues),
-                "broken_wikilinks": len(broken_links),
-                "orphan_notes": len(orphans),
-                "duplicate_basenames": len(duplicate_basenames),
-            },
-            "frontmatter_issues": fm_issues,
-            "broken_wikilinks": broken_links,
-            "orphan_notes": orphans,
-            "duplicate_basenames": duplicate_basenames,
-        }, indent=2))
-        return 0
+    return {
+        "label": label,
+        "root": str(root),
+        "files_scanned": len(files),
+        "frontmatter_issues": fm_issues,
+        "broken_wikilinks": broken_links,
+        "orphan_notes": orphans,
+        "duplicate_basenames": duplicate_basenames,
+    }
 
-    print("# Vault Audit Report\n")
-    print(f"Vault: `{vault}`")
-    print(f"Generated: {datetime.now().isoformat(timespec='seconds')}")
-    print(f"Files scanned: {len(md_files)}\n")
 
-    print("## Frontmatter issues\n")
-    if fm_issues:
-        for it in fm_issues:
+def _print_corpus(report: dict) -> None:
+    label = report["label"]
+    suffix = f" ({label})" if label else ""
+    print(f"## Frontmatter issues{suffix}\n")
+    if report["frontmatter_issues"]:
+        for it in report["frontmatter_issues"]:
             print(f"- `{it['file']}` — {it['issue']}")
     else:
         print("_(none)_")
     print()
 
-    print("## Broken wikilinks\n")
-    if broken_links:
-        for it in broken_links:
+    print(f"## Broken wikilinks{suffix}\n")
+    if report["broken_wikilinks"]:
+        for it in report["broken_wikilinks"]:
             print(f"- `{it['file']}` → `[[{it['link']}]]`")
     else:
         print("_(none)_")
     print()
 
-    print("## Orphan notes (no incoming wikilink, excluding README.md)\n")
-    if orphans:
-        for p in orphans:
+    print(f"## Orphan notes{suffix} (no incoming wikilink, excluding README.md)\n")
+    if report["orphan_notes"]:
+        for p in report["orphan_notes"]:
             print(f"- `{p}`")
     else:
         print("_(none)_")
     print()
 
-    print("## Duplicate basenames (bare wikilinks become ambiguous)\n")
-    if duplicate_basenames:
-        for d in duplicate_basenames:
+    print(f"## Duplicate basenames{suffix} (bare wikilinks become ambiguous)\n")
+    if report["duplicate_basenames"]:
+        for d in report["duplicate_basenames"]:
             print(f"- `{d['basename']}` shared by:")
             for p in d["paths"]:
                 print(f"  - `{p}`")
@@ -238,14 +220,87 @@ def main() -> int:
         print("_(none)_")
     print()
 
-    print("## Summary")
-    print(f"- Files scanned: {len(md_files)}")
-    print(f"- Frontmatter issues: {len(fm_issues)}")
-    print(f"- Broken wikilinks: {len(broken_links)}")
-    print(f"- Orphan notes: {len(orphans)}")
-    print(f"- Duplicate basenames: {len(duplicate_basenames)}")
 
-    has_issues = bool(fm_issues or broken_links or orphans or duplicate_basenames)
+def main() -> int:
+    ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    ap.add_argument("--vault", help="path to Obsidian vault (overrides config)")
+    ap.add_argument("--repo-vault", help="also audit this repo-vault corpus (path to project repo)")
+    ap.add_argument("--json", action="store_true", help="emit JSON instead of markdown")
+    args = ap.parse_args()
+
+    vault = resolve_vault(args.vault)
+    if not vault.is_dir():
+        print(f"vault not found at: {vault}", file=sys.stderr)
+        return 1
+
+    reports: list[dict] = []
+    reports.append(_audit_corpus(
+        label="personal" if args.repo_vault else "",
+        root=vault,
+        files=collect_md_files(vault),
+        project_required=False,
+    ))
+
+    if args.repo_vault:
+        repo_root = Path(args.repo_vault).expanduser().resolve()
+        if not repo_root.is_dir():
+            print(f"repo-vault not found at: {repo_root}", file=sys.stderr)
+            return 1
+        reports.append(_audit_corpus(
+            label=f"repo:{repo_root.name}",
+            root=repo_root,
+            files=enumerate_repo_docs(repo_root),
+            project_required=True,
+        ))
+
+    if args.json:
+        print(json.dumps({
+            "generated": datetime.now().isoformat(timespec="seconds"),
+            "corpora": [
+                {
+                    "label": r["label"],
+                    "root": r["root"],
+                    "counts": {
+                        "files_scanned": r["files_scanned"],
+                        "frontmatter_issues": len(r["frontmatter_issues"]),
+                        "broken_wikilinks": len(r["broken_wikilinks"]),
+                        "orphan_notes": len(r["orphan_notes"]),
+                        "duplicate_basenames": len(r["duplicate_basenames"]),
+                    },
+                    "frontmatter_issues": r["frontmatter_issues"],
+                    "broken_wikilinks": r["broken_wikilinks"],
+                    "orphan_notes": r["orphan_notes"],
+                    "duplicate_basenames": r["duplicate_basenames"],
+                }
+                for r in reports
+            ],
+        }, indent=2))
+        return 0
+
+    print("# Vault Audit Report\n")
+    for r in reports:
+        suffix = f" ({r['label']})" if r["label"] else ""
+        print(f"Corpus{suffix}: `{r['root']}`")
+        print(f"Files scanned: {r['files_scanned']}")
+    print(f"Generated: {datetime.now().isoformat(timespec='seconds')}\n")
+
+    for r in reports:
+        _print_corpus(r)
+
+    print("## Summary")
+    for r in reports:
+        suffix = f" ({r['label']})" if r["label"] else ""
+        print(f"- Corpus{suffix}: {r['files_scanned']} files, "
+              f"{len(r['frontmatter_issues'])} fm issues, "
+              f"{len(r['broken_wikilinks'])} broken links, "
+              f"{len(r['orphan_notes'])} orphans, "
+              f"{len(r['duplicate_basenames'])} dup basenames")
+
+    has_issues = any(
+        r["frontmatter_issues"] or r["broken_wikilinks"]
+        or r["orphan_notes"] or r["duplicate_basenames"]
+        for r in reports
+    )
     return 1 if has_issues else 0
 
 

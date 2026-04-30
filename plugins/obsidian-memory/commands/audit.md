@@ -1,36 +1,64 @@
 ---
-description: Run a full vault integrity audit (frontmatter, broken wikilinks, orphans, duplicate basenames). Pass --deep to also flag description-vs-body drift via an LLM pass.
+description: Run a full vault integrity audit — frontmatter, broken wikilinks, orphans, duplicate basenames, frontmatter backfill for missing notes, and description-vs-body drift. Operates on the personal vault and (when registered) the current project's repo-vault.
 ---
 
-Arguments: $ARGUMENTS
+Whole-corpus integrity check. Mirrors what SessionEnd does for the current session, but across the entire vault(s) — large blast radius, so anything LLM-judged is propose-then-confirm.
 
-## Step 1 — structural audit (always)
+## Step 1 — structural audit (deterministic, always)
 
-Run the deterministic audit script. This works whether or not `$CLAUDE_PLUGIN_ROOT` is set:
+Run the audit script. Includes the current project's repo-vault if registered + enabled.
 
 ```bash
-python3 "${CLAUDE_PLUGIN_ROOT:-$(ls -d ~/.claude/plugins/cache/jgcosme-plugins/obsidian-memory/*/ 2>/dev/null | tail -1 | sed 's:/$::')}/scripts/audit.py"
+PROJECT_DIR="${CLAUDE_PROJECT_DIR:-$PWD}"
+REPO_ROOT=$(git -C "$PROJECT_DIR" rev-parse --show-toplevel 2>/dev/null || true)
+REPO_VAULT_ARG=""
+if [ -n "$REPO_ROOT" ]; then
+  STATUS=$(python3 "${CLAUDE_PLUGIN_ROOT}/scripts/_repos.py" lookup "$REPO_ROOT" 2>/dev/null || echo "")
+  if [ "$STATUS" = "enabled" ]; then
+    REPO_VAULT_ARG="--repo-vault $REPO_ROOT"
+  fi
+fi
+python3 "${CLAUDE_PLUGIN_ROOT:-$(ls -d ~/.claude/plugins/cache/jgcosme-plugins/obsidian-memory/*/ 2>/dev/null | tail -1 | sed 's:/$::')}/scripts/audit.py" $REPO_VAULT_ARG
 ```
 
-If the script reports issues, group them by category and call out the highest-impact ones first (broken wikilinks > missing frontmatter > orphans > duplicate basenames). For each issue, suggest the smallest fix — auto-fixes aren't applied, so the user has to act.
+Group the script's output by category, highest-impact first (broken wikilinks > missing frontmatter > orphans > duplicate basenames). For each issue, propose the smallest fix. Auto-fixes aren't applied at this step — the user picks which to act on.
 
-If the audit comes back clean (exit 0, no issues), say so plainly.
+If the structural audit comes back clean, say so plainly and continue to Step 2.
 
-## Step 2 — deep description-drift pass (only if `$ARGUMENTS` contains `--deep`)
+## Step 2 — frontmatter backfill (LLM-judged, propose then apply)
 
-Goal: flag notes whose frontmatter `description` no longer accurately summarizes the body.
+For files flagged in Step 1 with `no frontmatter block`, propose plugin frontmatter using `init_repo_vault.py`'s heuristics. This is mostly relevant for the repo-vault corpus (personal-vault writes go through save-memory and won't reach audit missing-frontmatter unless something went wrong).
 
-1. Resolve the vault path: `$OBSIDIAN_VAULT_PATH` from `~/.config/obsidian-memory/config.env` if set, else `~/Documents/Obsidian Vault`.
-2. Enumerate candidate notes:
-   ```bash
-   find "$VAULT" -type f -name '*.md' -not -name 'README.md'
-   ```
-3. For each note, read it and judge: does the frontmatter `description` field still capture what the body is about? Account for substantial appends, scope shifts, or (for journals) sessions added after the description was written. Skip notes with no `description`.
-4. Report findings under `## Description drift` with one entry per drifted note:
-   - path
-   - current `description`
-   - suggested replacement (one line, ≤120 chars)
-   - one-line rationale for why it drifted
-5. **Do not auto-fix.** List only — the user decides which to apply. Offer to apply selected fixes if they ask.
+When the missing-frontmatter list is non-empty AND scoped to the repo-vault:
+
+```bash
+python3 "${CLAUDE_PLUGIN_ROOT}/scripts/init_repo_vault.py" "$REPO_ROOT" --project "$(python3 "${CLAUDE_PLUGIN_ROOT}/scripts/_repos.py" lookup "$REPO_ROOT" --json | jq -r '.project')" --dry-run
+```
+
+Show the proposed frontmatter for each file. Ask the user once: "Apply frontmatter to N files? (y/n)". On `y`, re-run the same command without `--dry-run`. On `n`, list the paths and skip.
+
+When missing-frontmatter is in the personal vault: list the paths under `## Personal-vault frontmatter to fix`. Do NOT auto-write — the user fixes those manually (these are usually outliers worth investigating, not bulk backfill).
+
+## Step 3 — description drift (LLM-judged, propose then apply)
+
+For every note with frontmatter, judge whether the `description:` field still summarizes the body. Skip notes with no `description`. Account for substantial appends, scope shifts, or (for journals) sessions added after the description was written.
+
+Walk both corpora — start with the personal vault, then the repo-vault if registered.
+
+Report findings under `## Description drift` with one entry per drifted note:
+
+- path
+- corpus (`personal` / `repo`)
+- current `description`
+- suggested replacement (one line, ≤120 chars)
+- one-line rationale for why it drifted
+
+After listing, ask the user: "Apply N description rewrites? (y/n)". On `y`, edit each flagged file's frontmatter line via Edit. Don't touch other fields. On `n`, skip — the report alone is value.
 
 If no drift is found, say so plainly and skip the section.
+
+## What this command does NOT do
+
+- **Auto-rewrite broken wikilinks**: report only. Audit is a snapshot — it can't tell whether a broken link is a typo or a since-renamed file. Renames during a session are handled by SessionEnd's backlink reconciliation.
+- **Cross-corpus operations**: wikilinks resolve within a corpus. Personal-vault notes can't link to repo-vault docs (or vice versa) — that's by design, to avoid the v1.4.0 drift surface that mirroring introduced.
+- **Auto-commit fixes**: any writes from Step 2 or Step 3 leave the working tree dirty for the user to review and commit on their own cadence (personal vault gets auto-committed at SessionEnd; repo-vault never).
