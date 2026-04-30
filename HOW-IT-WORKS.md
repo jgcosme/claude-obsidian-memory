@@ -16,12 +16,16 @@ The plugin runs three hooks across the Claude Code session lifecycle.
 1. **First-time setup gate.** If `$OBSIDIAN_VAULT_PATH` doesn't exist, the hook injects a consent prompt instructing Claude to ask the user once before running `setup.sh` (and offering an optional `git init`). It then exits early — none of the steps below run until the vault exists. On the next session after scaffolding, the normal flow takes over.
 2. Tries to launch Obsidian.app if available (purely so the optional `obsidian` CLI works). No-op on Linux.
 3. Derives the project name from `$CLAUDE_PROJECT_DIR` basename (or `$PWD`).
-4. Injects into context:
+4. **Repo-vault registry lookup.** Resolves cwd to its git toplevel and looks the path up in `~/.config/obsidian-memory/repos.json` via `_repos.py lookup`. Three states:
+   - `not_registered` + ≥1 candidate `.md` (per `_repo_docs.enumerate_repo_docs`) → injects a one-time registration prompt instructing Claude to ask the user "Register '<project>' as a repo-vault?". On `y`, Claude runs `init_repo_vault.py` (adds plugin frontmatter to files lacking any) and `_repos.py register --enabled`. On `n`, just `_repos.py register --no-enabled`. Either answer is durable in `repos.json`.
+   - `enabled` → runs `init_repo_vault.py` silently (idempotent — only files missing frontmatter pay the cost) and writes the resolved repo path to `/tmp/claude-memory-session/<session_id>.repo_vault` so `UserPromptSubmit` can re-use it without re-querying the registry.
+   - `disabled` → silent.
+5. Injects into context:
    - **Bootstrap instructions** — vault path + two-line skill pointers (`vault-search` for body-level lookups the gate's description-match misses, `save-memory` for writes). The CLI syntax, routing rules, frontmatter schema, and when-to-invoke heuristics live in each skill's body, not the bootstrap, so they only load when Claude invokes the skill.
    - **Vault `README.md`** — prose orientation.
-   - **Auto-generated vault overview** — produced by the shared `_overview.sh` helper (cached at `$MEMORY_OVERVIEW_CACHE_DIR`, invalidated by vault `*.md` mtimes). Lists Tools, General, and the current project's Decisions/Learnings/Research/References/Journal. Other projects appear as a name list to keep the payload small. The underlying `_vault.py overview` supports `--mode {full,tools-and-general,tools-only}` for testing leaner shapes via the eval harness; production runs use the default `full`.
-   - **Project-scaffolding prompt** if `Projects/<name>/` doesn't exist — instructs Claude to ask once before creating the folder.
-5. Records the vault's `git rev-parse HEAD` to `/tmp/claude-memory-session/<session_id>.vault_head` so `SessionEnd` can diff-scope backlink reconciliation to "what changed in the vault during this session" — including mid-session commits that working-tree-only diff would miss. Best-effort; absent values fall back to working-tree-only diff at SessionEnd.
+   - **Auto-generated vault overview** — produced by the shared `_overview.sh` helper (cached at `$MEMORY_OVERVIEW_CACHE_DIR`, invalidated by vault `*.md` mtimes; cache key spans personal vault + repo-vault path). Lists Tools, General, and the current project's notes from the personal vault. When the project has a registered+enabled repo-vault, an additional `# Repo vault: <project>` section follows, grouped by frontmatter `type:` (no enforced folder structure in repo-vaults).
+   - **Project-scaffolding prompt** if `Projects/<name>/` doesn't exist (legacy pre-v1.6 personal-vault layout — only fires for vaults still on that structure).
+6. Records the vault's `git rev-parse HEAD` to `/tmp/claude-memory-session/<session_id>.vault_head` so `SessionEnd` can diff-scope backlink reconciliation to "what changed in the vault during this session" — including mid-session commits that working-tree-only diff would miss. Best-effort; absent values fall back to working-tree-only diff at SessionEnd.
 
 Total injection is typically 3–8 KB depending on vault size.
 
@@ -125,6 +129,60 @@ Four event kinds:
 Timestamps are written in UTC ISO 8601 (`date -u '+%Y-%m-%dT%H:%M:%SZ'`) so they line up with the main session transcript at `~/.claude/projects/<encoded-cwd>/<session_id>.jsonl`, which uses the same format. `scripts/usage.sh` joins the two files to compute injection × turns-alive attribution and a per-session plugin share. See the `Session share` block in `/obsidian-memory:usage` output.
 
 When reading the main session transcript, **dedup by `.message.id`** — Claude Code re-emits the same assistant message multiple times via snapshot/replay events, and naive summing over-counts tokens by ~2×.
+
+## Federated repo-vaults
+
+A "repo-vault" is a project repo whose own markdown files participate as a second corpus alongside the personal vault. Same frontmatter format, same search/overview machinery, no mirroring or persisted cross-corpus state.
+
+**Registration** is per-project, opt-in, one-shot:
+
+- `~/.config/obsidian-memory/repos.json` is the single source of truth. Schema:
+  ```json
+  { "repos": { "/abs/path": { "enabled": bool, "project": "name" } } }
+  ```
+- `SessionStart` looks up cwd's git toplevel. If absent from `repos.json` and the repo has ≥1 candidate `.md`, it injects a one-time prompt asking the user once. Either answer (yes or no) is recorded; the prompt won't fire again.
+- `_repos.py` (`lookup`/`register`/`list`/`path` subcommands) is the helper that reads and writes the file. Hooks, the audit slash command, and `statusline.py` all go through it.
+
+**Corpus enumeration** is computed fresh each invocation — no persisted file list:
+
+- `_repo_docs.py enumerate <path>` runs `git ls-files` (tracked) + `git ls-files --others --exclude-standard` (untracked-not-gitignored), filters to `.md`, drops boilerplate (`LICENSE*`, `CHANGELOG*`, `CODE_OF_CONDUCT*`, `SECURITY*`, top-level dotfile dirs).
+- New files added between sessions are picked up automatically; deleted/moved files don't leave stale registry entries.
+
+**Init** (`init_repo_vault.py`) runs on registration and silently on every subsequent SessionStart of an enabled repo (idempotent — files with any existing frontmatter are skipped):
+
+- For files lacking frontmatter, batches them into one `claude -p` call to infer `type:` and `description:`. Type defaults to `reference` if the LLM call fails or the response is malformed.
+- Never reorganizes the repo's folder structure — only adds frontmatter blocks.
+- Skipped files include all SKILL.md, slash-command markdown, plugin templates, and test fixtures (because they all have other frontmatter conventions).
+
+**Read federation:**
+
+- `_vault.py search` and `overview` accept a `--repo-vault <path>` flag. When set, both corpora are walked and results carry a `corpus` field (`personal` / `repo`).
+- The `_overview.sh` helper accepts a third positional arg for the repo-vault path. Cache key spans `(personal_vault | project | repo_vault_path)`; cache freshness check (`find -newer`) walks both directories.
+- The retrieval gate (`UserPromptSubmit`) reads the repo-vault path from `/tmp/claude-memory-session/<session_id>.repo_vault` (written by `SessionStart`) so it doesn't re-query the registry per turn.
+
+**Write routing** (save-memory):
+
+```
+type == journal     → personal Journals/   (always; SessionEnd-only)
+type == tool        → personal Tools/      (always; cross-project by nature)
+type == preference  → personal Notes/      (always; project: tag if scoped)
+type ∈ {reference, decision, learning}:
+  repo-vault enabled AND repo has matching folder
+                     → repo-vault <folder>/
+  otherwise          → personal Notes/     (project: tag if scoped)
+```
+
+Folder match is case-insensitive on basename, top-level + one level under `docs/`. Patterns: `decision → decisions/|adr/|decision-records/`; `learning → learnings/|lessons/`; `reference → references/`. `_repo_docs.py match-type-folder <repo> --type <t>` returns the matched folder (exit 0) or nothing (exit 1).
+
+**Personal vault auto-commits at SessionEnd; repo-vault never auto-commits.** The repo's working tree carries the change for you to review and commit on your own cadence.
+
+**Audit** (`/obsidian-memory:audit`) operates on both corpora when the current project is registered + enabled. Wikilinks resolve within a corpus only — no cross-corpus link resolution, by design (avoiding the v1.4.0 mirroring drift problem).
+
+**Status line** appends `• <project>` whenever the cwd's repo is registered + enabled, so the active project tag is visible at a glance:
+
+```text
+obsidian-memory • my-project 384.0k tok · 23.4%
+```
 
 ## Recursion guard
 
