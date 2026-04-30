@@ -1,3 +1,10 @@
+---
+type: reference
+description: "Overview of obsidian-memory plugin - vault-backed persistent memory for Claude Code"
+created: 2026-04-30
+project: claude-obsidian-memory
+---
+
 # obsidian-memory
 
 A Claude Code plugin that turns a markdown directory into Claude's persistent memory. The vault is git-tracked, frontmatter-driven, and Obsidian-friendly — Obsidian.app is optional. Three lifecycle hooks plus two in-session skills handle recall, journaling, and proactive note-writing.

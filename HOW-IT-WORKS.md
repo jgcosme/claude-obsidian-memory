@@ -1,3 +1,10 @@
+---
+type: reference
+description: "Explains the three lifecycle hooks (SessionStart, UserPromptSubmit, SessionEnd) and how the plugin operates"
+created: 2026-04-30
+project: claude-obsidian-memory
+---
+
 # How it works
 
 The plugin runs three hooks across the Claude Code session lifecycle.

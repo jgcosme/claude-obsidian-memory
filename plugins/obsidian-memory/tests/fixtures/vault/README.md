@@ -1,3 +1,10 @@
+---
+type: reference
+description: "Description of the synthetic fixture vault used by gate-prompt evaluation tests"
+created: 2026-04-30
+project: claude-obsidian-memory
+---
+
 # Fixture vault
 
 Synthetic vault used by `tests/run_gate_eval.py` to evaluate the retrieval-gate

@@ -1,3 +1,10 @@
+---
+type: reference
+description: "Troubleshooting guide for common obsidian-memory plugin issues with diagnosis steps"
+created: 2026-04-30
+project: claude-obsidian-memory
+---
+
 # Troubleshooting
 
 **Quick diagnosis**

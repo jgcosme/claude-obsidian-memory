@@ -1,3 +1,10 @@
+---
+type: reference
+description: "Documentation for gate-prompt evaluation tests scoring retrieval-gate prompt precision and recall"
+created: 2026-04-30
+project: claude-obsidian-memory
+---
+
 # Tests
 
 ## Gate-prompt evaluation

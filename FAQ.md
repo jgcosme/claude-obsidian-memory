@@ -1,3 +1,10 @@
+---
+type: reference
+description: "FAQ about plugin behavior - session scoping, vault sharing, and related questions"
+created: 2026-04-30
+project: claude-obsidian-memory
+---
+
 # FAQ
 
 **Q: What if I switch projects mid-session by `cd`-ing somewhere else?**
