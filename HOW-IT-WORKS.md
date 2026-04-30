@@ -18,7 +18,7 @@ The plugin runs three hooks across the Claude Code session lifecycle.
 3. Derives the project name from `$CLAUDE_PROJECT_DIR` basename (or `$PWD`).
 4. **Repo-vault registry lookup.** Resolves cwd to its git toplevel and looks the path up in `~/.config/obsidian-memory/repos.json` via `_repos.py lookup`. Three states:
    - `not_registered` + ≥1 candidate `.md` (per `_repo_docs.enumerate_repo_docs`) → injects a one-time registration prompt instructing Claude to ask the user "Register '<project>' as a repo-vault?". On `y`, Claude runs `init_repo_vault.py` (adds plugin frontmatter to files lacking any) and `_repos.py register --enabled`. On `n`, just `_repos.py register --no-enabled`. Either answer is durable in `repos.json`.
-   - `enabled` → runs `init_repo_vault.py` silently (idempotent — only files missing frontmatter pay the cost) and writes the resolved repo path to `/tmp/claude-memory-session/<session_id>.repo_vault` so `UserPromptSubmit` can re-use it without re-querying the registry.
+   - `enabled` → runs `init_repo_vault.py` silently and writes the resolved repo path to `/tmp/claude-memory-session/<session_id>.repo_vault` so `UserPromptSubmit` can re-use it without re-querying the registry. Init is idempotent on writes (only files missing frontmatter get LLM-classified and written) but reads every candidate `.md` each run to make that decision — typically ~10ms total on a 30-50 file repo, scaling linearly with corpus size. The eager run is what catches teammate-added docs without a manual step.
    - `disabled` → silent.
 5. Injects into context:
    - **Bootstrap instructions** — vault path + two-line skill pointers (`vault-search` for body-level lookups the gate's description-match misses, `save-memory` for writes). The CLI syntax, routing rules, frontmatter schema, and when-to-invoke heuristics live in each skill's body, not the bootstrap, so they only load when Claude invokes the skill.
@@ -148,8 +148,10 @@ A "repo-vault" is a project repo whose own markdown files participate as a secon
 - `_repo_docs.py enumerate <path>` runs `git ls-files` (tracked) + `git ls-files --others --exclude-standard` (untracked-not-gitignored), filters to `.md`, drops boilerplate (`LICENSE*`, `CHANGELOG*`, `CODE_OF_CONDUCT*`, `SECURITY*`, top-level dotfile dirs).
 - New files added between sessions are picked up automatically; deleted/moved files don't leave stale registry entries.
 
-**Init** (`init_repo_vault.py`) runs on registration and silently on every subsequent SessionStart of an enabled repo (idempotent — files with any existing frontmatter are skipped):
+**Init** (`init_repo_vault.py`) runs on registration and silently on every subsequent SessionStart of an enabled repo:
 
+- Idempotent on writes: files with any existing frontmatter (plugin's, SKILL.md, slash-command, etc.) are detected and skipped without further work.
+- Reads, however, are paid every run: init opens each candidate `.md` to inspect the first few lines for a frontmatter block. On a typical 30-50 file repo this is ~10ms total; scales linearly with corpus size. We chose eager-on-every-session over a cache so teammate-added docs are surfaced the next session without a manual step. If this becomes a bottleneck on doc-heavy repos, the planned cheap fix is to track `last_init_head` per repo in `repos.json` and skip the file scan entirely when neither HEAD nor the working tree has changed.
 - For files lacking frontmatter, batches them into one `claude -p` call to infer `type:` and `description:`. Type defaults to `reference` if the LLM call fails or the response is malformed.
 - Never reorganizes the repo's folder structure — only adds frontmatter blocks.
 - Skipped files include all SKILL.md, slash-command markdown, plugin templates, and test fixtures (because they all have other frontmatter conventions).
