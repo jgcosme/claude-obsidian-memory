@@ -20,7 +20,7 @@ If the audit comes back clean (exit 0, no issues), say so plainly.
 
 Goal: flag notes whose frontmatter `description` no longer accurately summarizes the body.
 
-1. Resolve the vault path: `$OBSIDIAN_VAULT_PATH` from `~/.config/claude-memory/config.env` if set, else `~/Documents/Obsidian Vault`.
+1. Resolve the vault path: `$OBSIDIAN_VAULT_PATH` from `~/.config/obsidian-memory/config.env` if set, else `~/Documents/Obsidian Vault`.
 2. Enumerate candidate notes:
    ```bash
    find "$VAULT" -type f -name '*.md' -not -name 'README.md'

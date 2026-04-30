@@ -22,9 +22,10 @@ PAYLOAD=$(cat 2>/dev/null || true)
 SESSION_ID=$(printf '%s' "$PAYLOAD" | jq -r '.session_id // empty' 2>/dev/null || true)
 
 # ---------------------------------------------------------------------------
-# Config: load from ~/.config/claude-memory/config.env if present, else use defaults.
+# Config: load from ~/.config/obsidian-memory/config.env if present, else use defaults.
 # ---------------------------------------------------------------------------
-CONFIG_FILE="${HOME}/.config/claude-memory/config.env"
+CONFIG_DIR="${HOME}/.config/obsidian-memory"
+CONFIG_FILE="${CONFIG_DIR}/config.env"
 if [ -f "$CONFIG_FILE" ]; then
   # shellcheck disable=SC1090
   . "$CONFIG_FILE" 2>/dev/null || true
@@ -36,8 +37,8 @@ PLUGIN_ROOT="${CLAUDE_PLUGIN_ROOT:-}"
 # Refresh the stable status-line symlink each session so plugin upgrades
 # (which move CLAUDE_PLUGIN_ROOT to a new versioned path) keep working
 # without requiring the user to re-run setup.
-if [ -n "$PLUGIN_ROOT" ] && [ -f "$PLUGIN_ROOT/scripts/statusline.py" ] && [ -d "$HOME/.config/claude-memory" ]; then
-  ln -sfn "$PLUGIN_ROOT/scripts/statusline.py" "$HOME/.config/claude-memory/statusline.py" 2>/dev/null || true
+if [ -n "$PLUGIN_ROOT" ] && [ -f "$PLUGIN_ROOT/scripts/statusline.py" ] && [ -d "$CONFIG_DIR" ]; then
+  ln -sfn "$PLUGIN_ROOT/scripts/statusline.py" "$CONFIG_DIR/statusline.py" 2>/dev/null || true
 fi
 
 # Auto-detect Obsidian CLI (optional — only used for reactive queries)
@@ -52,7 +53,7 @@ fi
 # ---------------------------------------------------------------------------
 # First-time setup: if vault doesn't exist, instruct Claude to ask the user
 # once before scaffolding. setup.sh is idempotent and only writes under
-# $OBSIDIAN_VAULT_PATH and ~/.config/claude-memory/.
+# $OBSIDIAN_VAULT_PATH and ~/.config/obsidian-memory/.
 # ---------------------------------------------------------------------------
 if [ ! -d "$OBSIDIAN_VAULT_PATH" ]; then
   cat <<EOF
@@ -63,7 +64,7 @@ The plugin is installed but no vault exists yet at: $OBSIDIAN_VAULT_PATH
 Before doing anything else this session, ask the user ONCE:
   "Set up the obsidian-memory vault at $OBSIDIAN_VAULT_PATH? This creates the
    vault directory, scaffolds Tools/General/Projects/, and writes a config to
-   ~/.config/claude-memory/. Fully reversible. (y/n)"
+   ~/.config/obsidian-memory/. Fully reversible. (y/n)"
 
 If YES:
   1. bash "\${CLAUDE_PLUGIN_ROOT}/scripts/setup.sh"
@@ -80,7 +81,7 @@ or check current state with:
   /obsidian-memory:status
 
 To use a different vault path, set OBSIDIAN_VAULT_PATH in
-~/.config/claude-memory/config.env first.
+~/.config/obsidian-memory/config.env first.
 EOF
   exit 0
 fi

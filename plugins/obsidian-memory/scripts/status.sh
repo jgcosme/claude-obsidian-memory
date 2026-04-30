@@ -4,7 +4,7 @@
 
 set -u
 
-CONFIG_FILE="${HOME}/.config/claude-memory/config.env"
+CONFIG_FILE="${HOME}/.config/obsidian-memory/config.env"
 if [ -f "$CONFIG_FILE" ]; then
   # shellcheck disable=SC1090
   ( set +u; . "$CONFIG_FILE" ) >/dev/null 2>&1 && . "$CONFIG_FILE" 2>/dev/null || true

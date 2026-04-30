@@ -24,7 +24,8 @@ if [ ! -d "$PLUGIN_ROOT/templates" ]; then
   exit 1
 fi
 
-CONFIG_FILE="${HOME}/.config/claude-memory/config.env"
+CONFIG_DIR="${HOME}/.config/obsidian-memory"
+CONFIG_FILE="${CONFIG_DIR}/config.env"
 # Source config inside a subshell-style guard so a malformed config.env doesn't
 # abort setup mid-way through scaffolding.
 if [ -f "$CONFIG_FILE" ]; then
@@ -112,7 +113,7 @@ fi
 # ---------------------------------------------------------------------------
 # 2. Secrets file (empty template)
 # ---------------------------------------------------------------------------
-SECRETS_FILE="${HOME}/.config/claude-memory/secrets.env"
+SECRETS_FILE="${CONFIG_DIR}/secrets.env"
 if [ ! -f "$SECRETS_FILE" ]; then
   cp "$PLUGIN_ROOT/examples/secrets.env.example" "$SECRETS_FILE"
   chmod 600 "$SECRETS_FILE"
@@ -175,7 +176,7 @@ echo ""
 # Skips patching if the user already has a statusLine configured (we don't
 # clobber existing customizations).
 # ---------------------------------------------------------------------------
-STABLE_STATUSLINE="${HOME}/.config/claude-memory/statusline.py"
+STABLE_STATUSLINE="${CONFIG_DIR}/statusline.py"
 PLUGIN_STATUSLINE="$PLUGIN_ROOT/scripts/statusline.py"
 if [ -f "$PLUGIN_STATUSLINE" ]; then
   ln -sfn "$PLUGIN_STATUSLINE" "$STABLE_STATUSLINE"

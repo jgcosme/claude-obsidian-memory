@@ -114,7 +114,7 @@ project: <project-name>     # only for project-scoped notes
 
 ## Configuration
 
-Edit `~/.config/claude-memory/config.env`:
+Edit `~/.config/obsidian-memory/config.env`:
 
 | Variable | Default | Purpose |
 |---|---|---|
@@ -137,7 +137,7 @@ Edit `~/.config/claude-memory/config.env`:
 
 ## Secrets
 
-Never paste credentials into vault notes. Add them to `~/.config/claude-memory/secrets.env` and reference by variable name only:
+Never paste credentials into vault notes. Add them to `~/.config/obsidian-memory/secrets.env` and reference by variable name only:
 
 ```bash
 # secrets.env
@@ -146,7 +146,7 @@ export SLACK_USER_TOKEN="xoxp-..."
 
 ```markdown
 # in Tools/slack.md
-- Token: stored in `~/.config/claude-memory/secrets.env` as `SLACK_USER_TOKEN`. Source the file before use.
+- Token: stored in `~/.config/obsidian-memory/secrets.env` as `SLACK_USER_TOKEN`. Source the file before use.
 ```
 
 The setup script `chmod 600`s the file. See [TROUBLESHOOTING.md](./TROUBLESHOOTING.md) for credential-leak scans.
@@ -203,7 +203,7 @@ For full cleanup (data, config, logs):
 
 ```bash
 rm -rf "$HOME/Documents/Obsidian Vault"
-rm -rf "$HOME/.config/claude-memory"
+rm -rf "$HOME/.config/obsidian-memory"
 rm -f /tmp/claude-memory-review.log{,.1} /tmp/claude-memory-gate.log{,.1}
 rm -rf /tmp/claude-memory-gate-state /tmp/claude-memory-usage
 ```

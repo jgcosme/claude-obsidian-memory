@@ -39,7 +39,7 @@ Total injection is typically 3–8 KB depending on vault size.
 
 **Failure mode is loud and non-blocking:** errors print a one-line warning to stderr, log details to `/tmp/claude-memory-gate.log`, and exit `0` so the prompt still reaches the main session.
 
-**Disabling:** set `OBSIDIAN_MEMORY_GATE_ENABLED=false` in `~/.config/claude-memory/config.env`.
+**Disabling:** set `OBSIDIAN_MEMORY_GATE_ENABLED=false` in `~/.config/obsidian-memory/config.env`.
 
 **Bootstrap-overview flag:** by default the auto-overview is also injected into the main session's context at SessionStart so Claude can scan it during reasoning. Set `OBSIDIAN_MEMORY_BOOTSTRAP_OVERVIEW=false` to drop that injection — the gate keeps its own copy via `_overview.sh`, so retrieval keeps working; the main session loses its in-context "scan for relevance" map. Saves ~5–15KB cache_read per turn.
 
@@ -85,7 +85,7 @@ The skill is the **eager** path for in-session writes — moments are captured a
 
 The hook returns immediately; the review runs in the background and logs to `/tmp/claude-memory-review.log`. The review subprocess uses `claude -p --strict-mcp-config --output-format json` (same MCP-isolation rationale as the gate); on success the wrapper extracts the call's `.usage` / `.total_cost_usd` / `.duration_ms` and appends a `review_call` event to `/tmp/claude-memory-usage/<session_id>.jsonl`.
 
-**Disabling:** set `OBSIDIAN_MEMORY_REVIEW_ENABLED=false` in `~/.config/claude-memory/config.env` to skip the review entirely. Auto-commit of any vault writes from the in-session save-memory skill still fires. This is the single biggest token-cost lever — review reads the full transcript, which scales with session length.
+**Disabling:** set `OBSIDIAN_MEMORY_REVIEW_ENABLED=false` in `~/.config/obsidian-memory/config.env` to skip the review entirely. Auto-commit of any vault writes from the in-session save-memory skill still fires. This is the single biggest token-cost lever — review reads the full transcript, which scales with session length.
 
 **Transcript pre-filter:** before launching the reviewer, `session-end.sh` runs `scripts/_slim_transcript.py` to strip `tool_use` and `tool_result` content from the transcript and emit a compact dialogue version (user messages + assistant text + a one-line "used: Read, Bash, …" summary per assistant turn). On real sessions this reduces transcript size 94–96% (a 2.3MB transcript becomes ~95KB) while preserving the signal the reviewer acts on (decisions, corrections, validated approaches, novel facts). The reviewer reads the slim version via `Read` and writes notes from it; tool-call bodies that don't drive memory writes never enter the review's context. Disable via `OBSIDIAN_MEMORY_SLIM_TRANSCRIPT=false` to fall back to the raw transcript.
 

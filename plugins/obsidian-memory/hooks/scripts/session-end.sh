@@ -16,7 +16,7 @@ fi
 # ---------------------------------------------------------------------------
 # Config
 # ---------------------------------------------------------------------------
-CONFIG_FILE="${HOME}/.config/claude-memory/config.env"
+CONFIG_FILE="${HOME}/.config/obsidian-memory/config.env"
 if [ -f "$CONFIG_FILE" ]; then
   # shellcheck disable=SC1090
   . "$CONFIG_FILE"

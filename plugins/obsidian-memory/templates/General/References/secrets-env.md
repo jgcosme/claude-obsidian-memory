@@ -1,6 +1,6 @@
 ---
 type: reference
-description: Secrets pattern — tokens live in ~/.config/claude-memory/secrets.env, vault notes only reference variable names
+description: Secrets pattern — tokens live in ~/.config/obsidian-memory/secrets.env, vault notes only reference variable names
 created: __TODAY__
 ---
 
@@ -10,7 +10,7 @@ created: __TODAY__
 Never commit credentials to the Obsidian vault. The vault is meant to be git-tracked — possibly pushed to a remote, possibly shared — so anything written there is pushable. Keep secrets in a separate, gitignored file.
 
 ## Where secrets live
-- File: `~/.config/claude-memory/secrets.env`
+- File: `~/.config/obsidian-memory/secrets.env`
 - Permissions: `chmod 600`
 - Format: shell-sourceable `export NAME="value"` lines, with comments above each describing scope, expiry, and owner.
 
@@ -26,12 +26,12 @@ export OPENAI_API_KEY="sk-..."
 ## How tool notes reference secrets
 In `Tools/<tool>.md`, document:
 - The variable name (e.g. `SLACK_USER_TOKEN`)
-- That it lives in `~/.config/claude-memory/secrets.env`
-- A `source ~/.config/claude-memory/secrets.env` line before any example commands
+- That it lives in `~/.config/obsidian-memory/secrets.env`
+- A `source ~/.config/obsidian-memory/secrets.env` line before any example commands
 - Use `$VAR_NAME` in command examples — never paste the literal value
 
 ## Adding a new secret
-1. Append to `~/.config/claude-memory/secrets.env` (keep `chmod 600`).
+1. Append to `~/.config/obsidian-memory/secrets.env` (keep `chmod 600`).
 2. Update the relevant `Tools/<tool>.md` to reference the variable name.
 3. `grep` the vault before committing to confirm the literal value never landed in any note:
    ```bash

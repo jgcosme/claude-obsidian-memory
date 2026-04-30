@@ -6,7 +6,7 @@ created: 2026-04-20
 
 # Slack
 
-Workspace: acme.slack.com. Bot token in `~/.config/claude-memory/secrets.env` as `$SLACK_BOT_TOKEN`.
+Workspace: acme.slack.com. Bot token in `~/.config/obsidian-memory/secrets.env` as `$SLACK_BOT_TOKEN`.
 
 ```bash
 curl -H "Authorization: Bearer $SLACK_BOT_TOKEN" \

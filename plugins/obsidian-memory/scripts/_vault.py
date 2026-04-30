@@ -39,7 +39,7 @@ def resolve_vault(cli_vault: str | None = None) -> Path:
         return Path(os.path.expanduser(cli_vault)).resolve()
     if os.environ.get("OBSIDIAN_VAULT_PATH"):
         return Path(os.path.expanduser(os.environ["OBSIDIAN_VAULT_PATH"])).resolve()
-    config = Path.home() / ".config/claude-memory/config.env"
+    config = Path.home() / ".config/obsidian-memory/config.env"
     if config.is_file():
         for line in config.read_text().splitlines():
             line = line.strip()

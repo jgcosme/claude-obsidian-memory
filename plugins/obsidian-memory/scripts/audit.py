@@ -16,7 +16,7 @@ Usage:
   python3 scripts/audit.py --vault PATH      # override vault path
   python3 scripts/audit.py --json            # machine-readable output
 
-Vault path resolution: --vault flag > $OBSIDIAN_VAULT_PATH > ~/.config/claude-memory/config.env > ~/Documents/Obsidian Vault
+Vault path resolution: --vault flag > $OBSIDIAN_VAULT_PATH > ~/.config/obsidian-memory/config.env > ~/Documents/Obsidian Vault
 """
 
 from __future__ import annotations
