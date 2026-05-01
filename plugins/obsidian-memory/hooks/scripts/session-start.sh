@@ -96,11 +96,6 @@ if [ -n "$PLUGIN_ROOT" ] && [ -f "$PROJECTS_PY" ]; then
           python3 "$INIT_PY" "$PROJECT_ROOT" --project "$PROJECT_NAME" >/dev/null 2>&1 || true
         fi
         PROJECT_VAULT_PATH="$PROJECT_ROOT"
-        # Persist the resolved project-vault path for this session so the gate
-        # (UserPromptSubmit) can re-use it without re-querying the registry.
-        if [ -n "${SAFE_SID:-}" ]; then
-          printf '%s\n' "$PROJECT_VAULT_PATH" > "$SESSION_STATE_DIR/$SAFE_SID.project_vault" 2>/dev/null || true
-        fi
         ;;
       not_registered)
         # Check if there are any candidate .md files worth surfacing.

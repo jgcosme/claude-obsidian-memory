@@ -106,17 +106,18 @@ fi
 # mtime-invalidated cache so successive turns reuse the same overview when
 # the vault hasn't changed — avoiding a full vault walk per prompt.
 #
-# Project-vault path was resolved by SessionStart and persisted to
-# /tmp/.../$SAFE_SID.project_vault. We just re-read it here to avoid the
-# per-turn cost of re-querying the registry + git toplevel.
+# Resolve the project-vault directly from projects.json on every turn.
+# Cheap (one git toplevel + one jq read) and always reflects the live
+# registry, so /obsidian-memory:project enable|disable takes effect
+# immediately without restarting the session.
 # ---------------------------------------------------------------------------
 PROJECT_VAULT_PATH=""
-if [ -n "$SESSION_ID" ]; then
-  SAFE_SID=$(echo "$SESSION_ID" | tr -c 'A-Za-z0-9._-' '_')
-  STATE_DIR="${MEMORY_SESSION_STATE_DIR:-/tmp/claude-memory-session}"
-  if [ -f "$STATE_DIR/$SAFE_SID.project_vault" ]; then
-    PROJECT_VAULT_PATH=$(head -1 "$STATE_DIR/$SAFE_SID.project_vault" 2>/dev/null || echo "")
-    [ -d "$PROJECT_VAULT_PATH" ] || PROJECT_VAULT_PATH=""
+PROJECTS_JSON="${OBSIDIAN_MEMORY_PROJECTS_FILE:-$HOME/.config/obsidian-memory/projects.json}"
+if [ -f "$PROJECTS_JSON" ] && command -v jq >/dev/null 2>&1; then
+  PROJECT_ROOT=$(cd "$PROJECT_DIR" 2>/dev/null && git rev-parse --show-toplevel 2>/dev/null || true)
+  if [ -n "$PROJECT_ROOT" ] && [ -d "$PROJECT_ROOT" ]; then
+    enabled=$(jq -r --arg p "$PROJECT_ROOT" '.projects[$p].enabled // false' "$PROJECTS_JSON" 2>/dev/null || echo "false")
+    [ "$enabled" = "true" ] && PROJECT_VAULT_PATH="$PROJECT_ROOT"
   fi
 fi
 
