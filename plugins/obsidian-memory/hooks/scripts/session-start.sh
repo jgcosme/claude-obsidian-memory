@@ -120,36 +120,20 @@ if [ -n "$SESSION_ID" ]; then
   fi
 fi
 
-# 3. Emit memory bootstrap as injected context.
-#    Wrapped in { ... } | tee so we can record the total bytes injected for
-#    /obsidian-memory:usage. tee is reliable here (vs. process substitution)
-#    because it returns only after stdin EOFs.
-USAGE_TMP=$(mktemp 2>/dev/null || echo "")
-{
-cat <<INSTRUCTIONS
-=== OBSIDIAN MEMORY ===
-
-Vault: $OBSIDIAN_VAULT_PATH
-Index: the auto-overview below — regenerated each session from frontmatter.
-
-RECALL — invoke the \`vault-search\` skill for body-level lookups (the gate above only matches descriptions).
-REMEMBER — invoke the \`save-memory\` skill to write notes.
-
-INSTRUCTIONS
-
-# 4. README at vault root (if present) gives prose orientation.
-if [ -f "$OBSIDIAN_VAULT_PATH/README.md" ]; then
-  echo "=== VAULT README ==="
-  cat "$OBSIDIAN_VAULT_PATH/README.md"
-  echo ""
-fi
-
-# 5a. Project-vault status: look up the cwd's project in projects.json. Three states:
+# 3. Project-vault status: look up the cwd's project in projects.json. Three states:
 #   - enabled       → run init silently (idempotent), pass --project-vault to overview
 #   - disabled      → silent (user explicitly declined)
-#   - not_registered + has candidate .md files → emit one-time registration prompt
+#   - not_registered + has candidate .md files → capture one-time registration prompt
+#
+# Done BEFORE the output block so the registration prompt can be emitted at the
+# very top of stdout — when the hook output exceeds the persisted-output preview
+# threshold (~2KB), only the first chunk is shown to the model. Burying the
+# prompt below the vault overview makes it easy to miss.
 PROJECT_VAULT_PATH=""
 PROJECT_VAULT_STATUS=""
+REGISTER_PROMPT_NEEDED=""
+CANDIDATE_COUNT=0
+PROJECT_ROOT=""
 PROJECTS_PY="$PLUGIN_ROOT/scripts/_projects.py"
 INIT_PY="$PLUGIN_ROOT/scripts/init_project_vault.py"
 PROJECT_DOCS_PY="$PLUGIN_ROOT/scripts/_project_docs.py"
@@ -172,35 +156,11 @@ if [ -n "$PLUGIN_ROOT" ] && [ -f "$PROJECTS_PY" ]; then
         ;;
       not_registered)
         # Check if there are any candidate .md files worth surfacing.
-        CANDIDATE_COUNT=0
         if [ -f "$PROJECT_DOCS_PY" ]; then
           CANDIDATE_COUNT=$(python3 "$PROJECT_DOCS_PY" enumerate "$PROJECT_ROOT" 2>/dev/null | wc -l | tr -d ' ')
         fi
         if [ "${CANDIDATE_COUNT:-0}" -gt 0 ]; then
-          cat <<EOF
-=== PROJECT-VAULT REGISTRATION (one-time) ===
-
-This project ($PROJECT_NAME at $PROJECT_ROOT) has $CANDIDATE_COUNT candidate .md file(s)
-and is not yet registered as a project-vault.
-
-Ask once: "Register '$PROJECT_NAME' as a project-vault? This will:
-  - Add Obsidian frontmatter (type/description/created/project) to .md files that
-    don't already have any frontmatter (idempotent — files with frontmatter are skipped)
-  - Surface those docs in future SessionStart overviews and vault-search results
-  - Route project-scoped save-memory writes to the matching project folder when one exists
-  Answer y/n."
-
-YES → run both:
-  python3 "$INIT_PY" "$PROJECT_ROOT" --project "$PROJECT_NAME"
-  python3 "$PROJECTS_PY" register "$PROJECT_ROOT" --enabled --project "$PROJECT_NAME"
-
-NO → run:
-  python3 "$PROJECTS_PY" register "$PROJECT_ROOT" --no-enabled --project "$PROJECT_NAME"
-
-Either way, the answer is durable — this prompt only fires when the project has no entry
-in ~/.config/obsidian-memory/projects.json. To revisit later, edit that file.
-
-EOF
+          REGISTER_PROMPT_NEEDED=1
         fi
         ;;
       disabled|*)
@@ -210,7 +170,65 @@ EOF
   fi
 fi
 
-# 5. Auto-generated vault overview (the load-bearing piece).
+# 4. Emit memory bootstrap as injected context.
+#    Wrapped in { ... } | tee so we can record the total bytes injected for
+#    /obsidian-memory:usage. tee is reliable here (vs. process substitution)
+#    because it returns only after stdin EOFs.
+USAGE_TMP=$(mktemp 2>/dev/null || echo "")
+{
+# Registration prompt goes FIRST so it survives persisted-output truncation
+# (the harness shows only the first ~2KB of large hook output as preview).
+if [ -n "$REGISTER_PROMPT_NEEDED" ]; then
+  cat <<EOF
+=== ACTION REQUIRED — project-vault registration (one-time) ===
+
+Before responding to the user's first message this session, ask them:
+
+  "Register '$PROJECT_NAME' as a project-vault? This will:
+    - Add Obsidian frontmatter (type/description/created/project) to .md files
+      that don't already have any frontmatter (idempotent — files with
+      frontmatter are skipped)
+    - Surface those docs in future SessionStart overviews and vault-search results
+    - Route project-scoped save-memory writes to the matching project folder
+      when one exists
+   Answer y/n."
+
+Context: this project ($PROJECT_NAME at $PROJECT_ROOT) has $CANDIDATE_COUNT
+candidate .md file(s) and is not yet registered. The prompt only fires once
+per project — do not skip it.
+
+YES → run both:
+  python3 "$INIT_PY" "$PROJECT_ROOT" --project "$PROJECT_NAME"
+  python3 "$PROJECTS_PY" register "$PROJECT_ROOT" --enabled --project "$PROJECT_NAME"
+
+NO → run:
+  python3 "$PROJECTS_PY" register "$PROJECT_ROOT" --no-enabled --project "$PROJECT_NAME"
+
+Either way, the answer is durable. To revisit later, edit
+~/.config/obsidian-memory/projects.json.
+
+EOF
+fi
+
+cat <<INSTRUCTIONS
+=== OBSIDIAN MEMORY ===
+
+Vault: $OBSIDIAN_VAULT_PATH
+Index: the auto-overview below — regenerated each session from frontmatter.
+
+RECALL — invoke the \`vault-search\` skill for body-level lookups (the gate above only matches descriptions).
+REMEMBER — invoke the \`save-memory\` skill to write notes.
+
+INSTRUCTIONS
+
+# 5. README at vault root (if present) gives prose orientation.
+if [ -f "$OBSIDIAN_VAULT_PATH/README.md" ]; then
+  echo "=== VAULT README ==="
+  cat "$OBSIDIAN_VAULT_PATH/README.md"
+  echo ""
+fi
+
+# 6. Auto-generated vault overview (the load-bearing piece).
 # Goes through the shared cache helper so subsequent UserPromptSubmit calls
 # can reuse the same cache file when the vault hasn't changed. We always run
 # the helper to warm the cache for the gate; OBSIDIAN_MEMORY_BOOTSTRAP_OVERVIEW
@@ -232,7 +250,7 @@ if [ -n "$PLUGIN_ROOT" ] && [ -x "$OVERVIEW_HELPER" ]; then
   fi
 fi
 
-# 6. Project scaffolding prompt (only when the project has no vault folder yet).
+# 7. Project scaffolding prompt (only when the project has no vault folder yet).
 if [ ! -d "$PROJECT_VAULT_DIR" ]; then
   cat <<EOF
 === PROJECT: $PROJECT_NAME (not yet scaffolded) ===
