@@ -78,20 +78,20 @@ else
 fi
 echo ""
 
-echo "Repo-vaults:"
-REPOS_PY="$PLUGIN_ROOT/scripts/_repos.py"
-if [ -f "$REPOS_PY" ]; then
-  REPOS_JSON=$(python3 "$REPOS_PY" list --json 2>/dev/null || echo "[]")
-  CWD_REPO=$(git -C "${CLAUDE_PROJECT_DIR:-$PWD}" rev-parse --show-toplevel 2>/dev/null || echo "")
+echo "Project-vaults:"
+PROJECTS_PY="$PLUGIN_ROOT/scripts/_projects.py"
+if [ -f "$PROJECTS_PY" ]; then
+  PROJECTS_JSON=$(python3 "$PROJECTS_PY" list --json 2>/dev/null || echo "[]")
+  CWD_ROOT=$(git -C "${CLAUDE_PROJECT_DIR:-$PWD}" rev-parse --show-toplevel 2>/dev/null || echo "")
 
   # Current-cwd one-liner — quickly answers "is this session opted in?"
-  if [ -z "$CWD_REPO" ]; then
-    echo "  • current cwd: (not a git repo — repo-vault not applicable)"
+  if [ -z "$CWD_ROOT" ]; then
+    echo "  • current cwd: (not a git repo — project-vault not applicable)"
   else
-    CWD_STATUS=$(python3 "$REPOS_PY" lookup "$CWD_REPO" 2>/dev/null || echo "not_registered")
+    CWD_STATUS=$(python3 "$PROJECTS_PY" lookup "$CWD_ROOT" 2>/dev/null || echo "not_registered")
     case "$CWD_STATUS" in
       enabled)
-        CWD_PROJECT=$(python3 "$REPOS_PY" lookup "$CWD_REPO" --json 2>/dev/null | \
+        CWD_PROJECT=$(python3 "$PROJECTS_PY" lookup "$CWD_ROOT" --json 2>/dev/null | \
                       jq -r '.project // ""' 2>/dev/null || echo "")
         echo "  • current cwd: enabled ($CWD_PROJECT)"
         ;;
@@ -105,17 +105,17 @@ if [ -f "$REPOS_PY" ]; then
   fi
 
   # Registered list — empty case + enumerated case
-  COUNT=$(echo "$REPOS_JSON" | jq 'length' 2>/dev/null || echo 0)
+  COUNT=$(echo "$PROJECTS_JSON" | jq 'length' 2>/dev/null || echo 0)
   if [ "${COUNT:-0}" = "0" ]; then
-    echo "  • no repos registered yet"
+    echo "  • no projects registered yet"
   else
-    ENABLED=$(echo "$REPOS_JSON" | jq '[.[] | select(.enabled)] | length' 2>/dev/null || echo 0)
+    ENABLED=$(echo "$PROJECTS_JSON" | jq '[.[] | select(.enabled)] | length' 2>/dev/null || echo 0)
     echo "  • registered: $COUNT total · $ENABLED enabled"
-    echo "$REPOS_JSON" | jq -r --arg cwd "$CWD_REPO" '.[] |
+    echo "$PROJECTS_JSON" | jq -r --arg cwd "$CWD_ROOT" '.[] |
       "    \(if .enabled then "[on] " else "[off]" end) \(.project)  \(.path)\(if .path == $cwd then "  ← current" else "" end)"' 2>/dev/null
   fi
 else
-  warn "_repos.py missing (federation not available)"
+  warn "_projects.py missing (federation not available)"
 fi
 echo ""
 

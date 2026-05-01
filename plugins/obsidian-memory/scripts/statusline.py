@@ -4,7 +4,7 @@ current session. Mirrors the accounting in the plugin's /usage script.
 
 Stdin: Claude Code session JSON (session_id, transcript_path, cwd, ...).
 Stdout: one line, e.g. "obsidian-memory 18.2k tok · 4.3%"
-       When cwd's repo is registered+enabled in repos.json, the prefix
+       When cwd's project is registered+enabled in projects.json, the prefix
        becomes "obsidian-memory • <project>" so the project tag is visible
        at a glance.
 """
@@ -18,7 +18,7 @@ CHARS_KINDS = ("session_start", "gate_inject")
 
 
 def _project_tag(cwd: str) -> str:
-    """Return the registered project name for cwd's repo, or '' if not
+    """Return the registered project name for cwd's project, or '' if not
     registered+enabled. Best-effort: any error → ''."""
     if not cwd:
         return ""
@@ -31,19 +31,19 @@ def _project_tag(cwd: str) -> str:
         return ""
     if toplevel.returncode != 0:
         return ""
-    repo_root = toplevel.stdout.strip()
-    if not repo_root:
+    project_root = toplevel.stdout.strip()
+    if not project_root:
         return ""
-    repos_file = os.environ.get(
-        "OBSIDIAN_MEMORY_REPOS_FILE",
-        str(Path.home() / ".config/obsidian-memory/repos.json"),
+    projects_file = os.environ.get(
+        "OBSIDIAN_MEMORY_PROJECTS_FILE",
+        str(Path.home() / ".config/obsidian-memory/projects.json"),
     )
     try:
-        with open(repos_file, encoding="utf-8") as f:
+        with open(projects_file, encoding="utf-8") as f:
             data = json.load(f)
     except (FileNotFoundError, json.JSONDecodeError, OSError):
         return ""
-    entry = (data.get("repos") or {}).get(str(Path(repo_root).resolve()))
+    entry = (data.get("projects") or {}).get(str(Path(project_root).resolve()))
     if not entry or not entry.get("enabled"):
         return ""
     return str(entry.get("project") or "")

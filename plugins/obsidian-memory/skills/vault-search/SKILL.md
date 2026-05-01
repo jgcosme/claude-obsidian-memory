@@ -20,12 +20,12 @@ python3 "${CLAUDE_PLUGIN_ROOT}/scripts/_vault.py" search \
   [--type <preference|reference|decision|learning|tool|people>] \
   [--path-prefix Projects/<name>] \
   [--created-after YYYY-MM-DD] \
-  [--repo-vault $CLAUDE_PROJECT_DIR] \
+  [--project-vault $CLAUDE_PROJECT_DIR] \
   [--json]
 
-# When the project is registered as a repo-vault (see ~/.config/obsidian-memory/repos.json),
-# add --repo-vault to also search the project's docs alongside the personal vault.
-# Results carry a `corpus` field ("personal" or "repo") to disambiguate.
+# When the project is registered as a project-vault (see ~/.config/obsidian-memory/projects.json),
+# add --project-vault to also search the project's docs alongside the personal vault.
+# Results carry a `corpus` field ("personal" or "project") to disambiguate.
 
 # Read a known path directly
 # Use the Read tool against "$OBSIDIAN_VAULT_PATH/<path>"

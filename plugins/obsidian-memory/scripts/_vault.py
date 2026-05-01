@@ -30,9 +30,9 @@ FRONTMATTER_RE = re.compile(r"^﻿?---\s*\r?\n(.*?)\r?\n---\s*\r?\n", re.DOTALL)
 WIKILINK_RE = re.compile(r"\[\[([^\]]+)\]\]")
 SKIP_DIRS = {".git", ".obsidian", ".trash", "node_modules", ".archive"}
 
-# Sibling module: repo-vault corpus enumeration via git ls-files.
+# Sibling module: project-vault corpus enumeration via git ls-files.
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from _repo_docs import enumerate_repo_docs  # noqa: E402
+from _project_docs import enumerate_project_docs  # noqa: E402
 
 
 # ---------------------------------------------------------------------------
@@ -111,14 +111,14 @@ def search(
     created_after: str | None = None,
     created_before: str | None = None,
     limit: int = 50,
-    repo_vault: Path | None = None,
+    project_vault: Path | None = None,
 ) -> list[dict]:
     """Frontmatter-aware vault search across one or two corpora.
 
     Returns a list of {corpus, path, type, description, project, created} dicts
     ranked by simple keyword frequency. All filters AND together. When
-    repo_vault is provided, results from that corpus are merged into the
-    ranking; the `corpus` field disambiguates ("personal" or "repo").
+    project_vault is provided, results from that corpus are merged into the
+    ranking; the `corpus` field disambiguates ("personal" or "project").
     """
     after = _parse_date(created_after) if created_after else None
     before = _parse_date(created_before) if created_before else None
@@ -167,8 +167,8 @@ def search(
             }))
 
     score_one("personal", vault, collect_md_files(vault))
-    if repo_vault is not None:
-        score_one("repo", repo_vault, enumerate_repo_docs(repo_vault))
+    if project_vault is not None:
+        score_one("project", project_vault, enumerate_project_docs(project_vault))
 
     hits.sort(key=lambda x: (-x[0], x[1]["corpus"], x[1]["path"]))
     return [h[1] for h in hits[:limit]]
@@ -328,16 +328,16 @@ def overview(vault: Path, project: str | None = None, mode: str = "full") -> str
     return "\n".join(out)
 
 
-def overview_repo(repo_vault: Path, project: str | None = None) -> str:
-    """Build a markdown overview of a repo-vault corpus, grouped by `type:`.
+def overview_project(project_vault: Path, project: str | None = None) -> str:
+    """Build a markdown overview of a project-vault corpus, grouped by `type:`.
 
-    Repo-vaults have no enforced folder structure (init only adds frontmatter,
+    Project-vaults have no enforced folder structure (init only adds frontmatter,
     it doesn't reorganize). Grouping by frontmatter `type:` gives a stable
     overview shape regardless of how the repo lays out its docs. Files
     without plugin frontmatter are skipped — they're not corpus members yet
     (init backfills them at registration time).
     """
-    md_files = enumerate_repo_docs(repo_vault)
+    md_files = enumerate_project_docs(project_vault)
     by_type: dict[str, list[tuple[Path, dict[str, str]]]] = {}
     for f in md_files:
         fm, _ = read_note(f)
@@ -345,7 +345,7 @@ def overview_repo(repo_vault: Path, project: str | None = None) -> str:
             continue
         by_type.setdefault(fm.get("type", "untyped"), []).append((f, fm))
 
-    title = f"Repo vault: {project}" if project else f"Repo vault: {repo_vault.name}"
+    title = f"Project vault: {project}" if project else f"Project vault: {project_vault.name}"
     out: list[str] = [f"# {title}", ""]
     if not by_type:
         out.append("_(no notes with plugin frontmatter — run init to backfill)_")
@@ -356,7 +356,7 @@ def overview_repo(repo_vault: Path, project: str | None = None) -> str:
         items = sorted(by_type[type_], key=lambda x: x[0])
         out.append(f"## {type_}")
         for f, fm in items:
-            rel = str(f.relative_to(repo_vault))
+            rel = str(f.relative_to(project_vault))
             out.append(_bullet(rel, fm))
         out.append("")
 
@@ -527,11 +527,11 @@ def _cmd_search(args: argparse.Namespace) -> int:
     if not vault.is_dir():
         print(f"vault not found at: {vault}", file=sys.stderr)
         return 1
-    repo_vault: Path | None = None
-    if args.repo_vault:
-        repo_vault = Path(args.repo_vault).expanduser().resolve()
-        if not repo_vault.is_dir():
-            print(f"repo-vault not found at: {repo_vault}", file=sys.stderr)
+    project_vault: Path | None = None
+    if args.project_vault:
+        project_vault = Path(args.project_vault).expanduser().resolve()
+        if not project_vault.is_dir():
+            print(f"project-vault not found at: {project_vault}", file=sys.stderr)
             return 1
     results = search(
         vault,
@@ -541,7 +541,7 @@ def _cmd_search(args: argparse.Namespace) -> int:
         created_after=args.created_after,
         created_before=args.created_before,
         limit=args.limit,
-        repo_vault=repo_vault,
+        project_vault=project_vault,
     )
     if args.json:
         print(json.dumps(results, indent=2))
@@ -550,7 +550,7 @@ def _cmd_search(args: argparse.Namespace) -> int:
             print("(no matches)")
         for r in results:
             desc = f" — {r['description']}" if r["description"] else ""
-            tag = f"[{r['corpus']}] " if repo_vault is not None else ""
+            tag = f"[{r['corpus']}] " if project_vault is not None else ""
             print(f"{tag}{r['path']}{desc}")
     return 0
 
@@ -561,13 +561,13 @@ def _cmd_overview(args: argparse.Namespace) -> int:
         print(f"vault not found at: {vault}", file=sys.stderr)
         return 1
     print(overview(vault, project=args.project, mode=args.mode))
-    if args.repo_vault:
-        repo_vault = Path(args.repo_vault).expanduser().resolve()
-        if repo_vault.is_dir():
+    if args.project_vault:
+        project_vault = Path(args.project_vault).expanduser().resolve()
+        if project_vault.is_dir():
             print()
-            print(overview_repo(repo_vault, project=args.project))
+            print(overview_project(project_vault, project=args.project))
         else:
-            print(f"\n_(repo-vault not found at: {repo_vault})_", file=sys.stderr)
+            print(f"\n_(project-vault not found at: {project_vault})_", file=sys.stderr)
     return 0
 
 
@@ -602,14 +602,14 @@ def main(argv: list[str] | None = None) -> int:
     sp.add_argument("--created-before", help="ISO date YYYY-MM-DD; only notes with `created:` <= this date")
     sp.add_argument("--limit", type=int, default=50, help="max results (default 50)")
     sp.add_argument("--json", action="store_true", help="emit JSON instead of text")
-    sp.add_argument("--repo-vault", help="also search this repo-vault corpus (path to project repo)")
+    sp.add_argument("--project-vault", help="also search this project-vault corpus (path to project repo)")
     sp.set_defaults(func=_cmd_search)
 
     op = sub.add_parser("overview", help="emit a markdown vault overview")
     op.add_argument("--project", help="current project name; deep-lists its notes (others appear as a name list)")
     op.add_argument("--mode", choices=["full", "tools-and-general", "tools-only"], default="full",
                     help="overview detail level (default: full)")
-    op.add_argument("--repo-vault", help="also emit an overview block for this repo-vault corpus")
+    op.add_argument("--project-vault", help="also emit an overview block for this project-vault corpus")
     op.set_defaults(func=_cmd_overview)
 
     cp = sub.add_parser("vault-changes",

@@ -22,7 +22,7 @@ Claude Code's per-project auto-memory (`~/.claude/projects/*/memory/`) is siloed
   - **`save-memory`** — captures stable cross-session information regardless of source (user-stated or tool-discovered): corrections, preferences, decisions and rationale, novel facts (people, IDs, configs, channels, dashboards, endpoints).
 
   `SessionEnd` writes the journal entry and backstops anything the skills missed (dedup-by-search, integrity check, auto-commit).
-- **Federated repo-vaults.** Project repos can be opted in (per-project, one prompt) so their docs are read alongside the personal vault and written to by save-memory when the project's existing structure is the right home for a memory. No mirroring; each vault stays in its own git.
+- **Federated project-vaults.** Project repos can be opted in (per-project, one prompt) so their docs are read alongside the personal vault and written to by save-memory when the project's existing structure is the right home for a memory. No mirroring; each vault stays in its own git.
 
 For internals, see [HOW-IT-WORKS.md](./HOW-IT-WORKS.md).
 
@@ -70,7 +70,7 @@ gh repo create my-obsidian-vault --private --source "$HOME/Documents/Obsidian Va
 |---|---|
 | `/obsidian-memory:status` | Health check: config, vault, prereqs, scripts, recent activity. |
 | `/obsidian-memory:usage` | Per-kind token breakdown + plugin's share of this session's tokens. |
-| `/obsidian-memory:audit` | Whole-corpus integrity: frontmatter, broken wikilinks, orphans, duplicate basenames, frontmatter backfill, description-vs-body drift. Operates on the personal vault and the current project's repo-vault when registered. |
+| `/obsidian-memory:audit` | Whole-corpus integrity: frontmatter, broken wikilinks, orphans, duplicate basenames, frontmatter backfill, description-vs-body drift. Operates on the personal vault and the current project's project-vault when registered. |
 
 ## Visibility
 
@@ -86,7 +86,7 @@ Setup also wires the plugin's token-usage readout into Claude Code's status line
 obsidian-memory • my-project 384.0k tok · 23.4%
 ```
 
-The `• <project>` appears whenever the current repo is registered as a repo-vault (see [Federated repo-vaults](#federated-repo-vaults) below). The status line is set during `setup.sh` only if you don't already have one configured (existing customizations are left alone).
+The `• <project>` appears whenever the current repo is registered as a project-vault (see [Federated project-vaults](#federated-project-vaults) below). The status line is set during `setup.sh` only if you don't already have one configured (existing customizations are left alone).
 
 ## Vault structure
 
@@ -115,33 +115,33 @@ Six types. `type` lives in frontmatter; the auto-overview groups by `type:` rath
 
 **Pre-v1.6 vaults** keep their original `General/Preferences/`, `Projects/<name>/Decisions/` layout — existing notes work as-is, the gate finds them, audit checks them. New writes (from v1.6+ save-memory) go to the new flat structure. Migration is a manual operation when you want it, not forced.
 
-## Federated repo-vaults
+## Federated project-vaults
 
-Project repos can be registered as a "repo-vault" — a second corpus searched alongside the personal vault and written to by save-memory when the project's docs are the right home for a memory.
+Project repos can be registered as a "project-vault" — a second corpus searched alongside the personal vault and written to by save-memory when the project's docs are the right home for a memory.
 
 The first time you start a session in a project repo with markdown files, `SessionStart` asks once:
 
 ```
-Register 'my-project' as a repo-vault?
+Register 'my-project' as a project-vault?
 ```
 
-- **Yes** → `init_repo_vault.py` adds plugin frontmatter (`type/description/created/project`) to `.md` files that don't already have any frontmatter. The repo is recorded in `~/.config/obsidian-memory/repos.json` as `enabled`. Future sessions surface those docs in the auto-overview alongside the personal vault.
+- **Yes** → `init_project_vault.py` adds plugin frontmatter (`type/description/created/project`) to `.md` files that don't already have any frontmatter. The repo is recorded in `~/.config/obsidian-memory/projects.json` as `enabled`. Future sessions surface those docs in the auto-overview alongside the personal vault.
 - **No** → recorded as `disabled`. No frontmatter added, no overview block. The prompt won't fire again for this repo.
 
 The corpus is whatever `git ls-files` surfaces (tracked + untracked-not-gitignored), minus boilerplate (`LICENSE`, `CHANGELOG`, `.github/` templates, etc.). No persisted file list — the corpus is recomputed every session, so docs added or moved between sessions are picked up automatically.
 
 When a repo is registered + enabled:
 
-- **Read**: search and overview span both corpora; results carry a `corpus` field (`personal` / `repo`).
+- **Read**: search and overview span both corpora; results carry a `corpus` field (`personal` / `project`).
 - **Write**: save-memory routes by type — `decision` → repo's `decisions/` folder if it exists, else personal `Notes/`; same for `learning`, `reference`. `tool` and `preference` always go to personal. Journals are personal-only, written by SessionEnd.
-- **No mirroring**: each vault stays in its own git. The personal vault auto-commits at SessionEnd; the repo-vault never auto-commits — its files appear in the repo's working tree for you to review and commit on your own cadence.
+- **No mirroring**: each vault stays in its own git. The personal vault auto-commits at SessionEnd; the project-vault never auto-commits — its files appear in the repo's working tree for you to review and commit on your own cadence.
 
 ## Configuration
 
 Two files live in `~/.config/obsidian-memory/`:
 
 - `config.env` — environment variables (vault path, feature flags, log dirs). See table below.
-- `repos.json` — repo-vault registry. Each opted-in project gets one entry:
+- `projects.json` — project-vault registry. Each opted-in project gets one entry:
 
   ```json
   {

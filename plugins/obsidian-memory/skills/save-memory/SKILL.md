@@ -6,7 +6,7 @@ description: Capture an in-session memory note to the Obsidian vault. Invoke whe
 
 You've judged the latest moment as save-worthy. Now: search first to avoid duplicates, decide where it goes, propose to the user, then write on confirmation.
 
-The personal vault is `$OBSIDIAN_VAULT_PATH` (or `~/Documents/Obsidian Vault` if unset). The plugin path is `${CLAUDE_PLUGIN_ROOT}`. The current project's repo-vault status is in `~/.config/obsidian-memory/repos.json` — check via `_repos.py lookup` (below).
+The personal vault is `$OBSIDIAN_VAULT_PATH` (or `~/Documents/Obsidian Vault` if unset). The plugin path is `${CLAUDE_PLUGIN_ROOT}`. The current project's project-vault status is in `~/.config/obsidian-memory/projects.json` — check via `_projects.py lookup` (below).
 
 ## 1. Search first
 
@@ -16,11 +16,11 @@ A near-duplicate is more useful than a new note. Run:
 python3 "${CLAUDE_PLUGIN_ROOT}/scripts/_vault.py" search \
   --vault "$OBSIDIAN_VAULT_PATH" \
   --keywords "<2-4 keywords from the moment>" \
-  --repo-vault "$CLAUDE_PROJECT_DIR" \
+  --project-vault "$CLAUDE_PROJECT_DIR" \
   --json
 ```
 
-The `--repo-vault` arg is harmless when the project isn't registered (no extra results). Results carry a `corpus` field — `personal` or `repo`. If a match exists, propose **extending** that note rather than creating a new one. Read the match first; preserve its body and append.
+The `--project-vault` arg is harmless when the project isn't registered (no extra results). Results carry a `corpus` field — `personal` or `project`. If a match exists, propose **extending** that note rather than creating a new one. Read the match first; preserve its body and append.
 
 ## 2. Pick the type (one of six)
 
@@ -47,28 +47,28 @@ B. type == preference
      (Add project: tag only if the rule is narrowly scoped to one project.)
 
 C. type in {reference, decision, learning}:
-   1. Look up cwd's repo-vault status:
-        STATUS=$(python3 "${CLAUDE_PLUGIN_ROOT}/scripts/_repos.py" lookup "$CLAUDE_PROJECT_DIR")
+   1. Look up cwd's project-vault status:
+        STATUS=$(python3 "${CLAUDE_PLUGIN_ROOT}/scripts/_projects.py" lookup "$CLAUDE_PROJECT_DIR")
 
    2. If STATUS == enabled, ask whether a matching repo folder exists:
-        FOLDER=$(python3 "${CLAUDE_PLUGIN_ROOT}/scripts/_repo_docs.py" \
+        FOLDER=$(python3 "${CLAUDE_PLUGIN_ROOT}/scripts/_project_docs.py" \
                   match-type-folder "$CLAUDE_PROJECT_DIR" --type <type>)
       If exit=0, FOLDER is the repo-relative path (e.g. `docs/decisions`).
 
    3. Decide:
         STATUS=enabled AND FOLDER non-empty
-            → $CLAUDE_PROJECT_DIR/$FOLDER/<slug>.md  (repo-vault note)
+            → $CLAUDE_PROJECT_DIR/$FOLDER/<slug>.md  (project-vault note)
         otherwise
             → $OBSIDIAN_VAULT_PATH/Notes/<slug>.md   (personal-vault note)
 
       Add `project:` tag whenever the memory is project-scoped, regardless of
-      where the note lands. The tag value comes from `_repos.py lookup --json`
+      where the note lands. The tag value comes from `_projects.py lookup --json`
       when registered, else the repo basename, else omit.
 ```
 
-The repo-vault path is `$CLAUDE_PROJECT_DIR` (or `git -C $CLAUDE_PROJECT_DIR rev-parse --show-toplevel` if cwd is a subdir of the repo).
+The project-vault path is `$CLAUDE_PROJECT_DIR` (or `git -C $CLAUDE_PROJECT_DIR rev-parse --show-toplevel` if cwd is a subdir of the repo).
 
-WIP guard for repo-vault writes: before writing to an *existing* file in the repo, run `git -C "$CLAUDE_PROJECT_DIR" status --porcelain -- <target>`. Non-empty → skip and tell the user where you would have written. New files in the repo skip this guard.
+WIP guard for project-vault writes: before writing to an *existing* file in the repo, run `git -C "$CLAUDE_PROJECT_DIR" status --porcelain -- <target>`. Non-empty → skip and tell the user where you would have written. New files in the repo skip this guard.
 
 ## 4. Frontmatter (required on every new note)
 
@@ -89,7 +89,7 @@ Before writing, show the user a compact preview:
 
 ```
 save-memory: would write
-  corpus:       personal | repo:<project>
+  corpus:       personal | project:<name>
   path:         <full path>
   type:         <type>
   description:  <one line>
@@ -98,7 +98,7 @@ save-memory: would write
 save? (y/n)
 ```
 
-On `y`, write the file with the Write tool. Don't run `git add` / `git commit` — the SessionEnd hook auto-commits the personal vault. Repo-vault writes leave the repo's working tree dirty for the user to review and commit on their own cadence.
+On `y`, write the file with the Write tool. Don't run `git add` / `git commit` — the SessionEnd hook auto-commits the personal vault. Project-vault writes leave the repo's working tree dirty for the user to review and commit on their own cadence.
 
 On `n` or anything else, drop it and return to the user's task.
 

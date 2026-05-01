@@ -144,61 +144,61 @@ if [ -f "$OBSIDIAN_VAULT_PATH/README.md" ]; then
   echo ""
 fi
 
-# 5a. Repo-vault status: look up the cwd's repo in repos.json. Three states:
-#   - enabled       → run init silently (idempotent), pass --repo-vault to overview
+# 5a. Project-vault status: look up the cwd's project in projects.json. Three states:
+#   - enabled       → run init silently (idempotent), pass --project-vault to overview
 #   - disabled      → silent (user explicitly declined)
 #   - not_registered + has candidate .md files → emit one-time registration prompt
-REPO_VAULT_PATH=""
-REPO_VAULT_STATUS=""
-REPO_PY="$PLUGIN_ROOT/scripts/_repos.py"
-INIT_PY="$PLUGIN_ROOT/scripts/init_repo_vault.py"
-REPO_DOCS_PY="$PLUGIN_ROOT/scripts/_repo_docs.py"
-if [ -n "$PLUGIN_ROOT" ] && [ -f "$REPO_PY" ]; then
-  REPO_ROOT=$(git -C "$PROJECT_DIR" rev-parse --show-toplevel 2>/dev/null || echo "")
-  if [ -n "$REPO_ROOT" ]; then
-    REPO_VAULT_STATUS=$(python3 "$REPO_PY" lookup "$REPO_ROOT" 2>/dev/null || echo "")
-    case "$REPO_VAULT_STATUS" in
+PROJECT_VAULT_PATH=""
+PROJECT_VAULT_STATUS=""
+PROJECTS_PY="$PLUGIN_ROOT/scripts/_projects.py"
+INIT_PY="$PLUGIN_ROOT/scripts/init_project_vault.py"
+PROJECT_DOCS_PY="$PLUGIN_ROOT/scripts/_project_docs.py"
+if [ -n "$PLUGIN_ROOT" ] && [ -f "$PROJECTS_PY" ]; then
+  PROJECT_ROOT=$(git -C "$PROJECT_DIR" rev-parse --show-toplevel 2>/dev/null || echo "")
+  if [ -n "$PROJECT_ROOT" ]; then
+    PROJECT_VAULT_STATUS=$(python3 "$PROJECTS_PY" lookup "$PROJECT_ROOT" 2>/dev/null || echo "")
+    case "$PROJECT_VAULT_STATUS" in
       enabled)
         # Eager init before overview so newly-added docs are surfaced this session.
         if [ -f "$INIT_PY" ]; then
-          python3 "$INIT_PY" "$REPO_ROOT" --project "$PROJECT_NAME" >/dev/null 2>&1 || true
+          python3 "$INIT_PY" "$PROJECT_ROOT" --project "$PROJECT_NAME" >/dev/null 2>&1 || true
         fi
-        REPO_VAULT_PATH="$REPO_ROOT"
-        # Persist the resolved repo-vault path for this session so the gate
+        PROJECT_VAULT_PATH="$PROJECT_ROOT"
+        # Persist the resolved project-vault path for this session so the gate
         # (UserPromptSubmit) can re-use it without re-querying the registry.
         if [ -n "${SAFE_SID:-}" ]; then
-          printf '%s\n' "$REPO_VAULT_PATH" > "$SESSION_STATE_DIR/$SAFE_SID.repo_vault" 2>/dev/null || true
+          printf '%s\n' "$PROJECT_VAULT_PATH" > "$SESSION_STATE_DIR/$SAFE_SID.project_vault" 2>/dev/null || true
         fi
         ;;
       not_registered)
         # Check if there are any candidate .md files worth surfacing.
         CANDIDATE_COUNT=0
-        if [ -f "$REPO_DOCS_PY" ]; then
-          CANDIDATE_COUNT=$(python3 "$REPO_DOCS_PY" enumerate "$REPO_ROOT" 2>/dev/null | wc -l | tr -d ' ')
+        if [ -f "$PROJECT_DOCS_PY" ]; then
+          CANDIDATE_COUNT=$(python3 "$PROJECT_DOCS_PY" enumerate "$PROJECT_ROOT" 2>/dev/null | wc -l | tr -d ' ')
         fi
         if [ "${CANDIDATE_COUNT:-0}" -gt 0 ]; then
           cat <<EOF
-=== REPO-VAULT REGISTRATION (one-time) ===
+=== PROJECT-VAULT REGISTRATION (one-time) ===
 
-This project ($PROJECT_NAME at $REPO_ROOT) has $CANDIDATE_COUNT candidate .md file(s)
-and is not yet registered as a repo-vault.
+This project ($PROJECT_NAME at $PROJECT_ROOT) has $CANDIDATE_COUNT candidate .md file(s)
+and is not yet registered as a project-vault.
 
-Ask once: "Register '$PROJECT_NAME' as a repo-vault? This will:
+Ask once: "Register '$PROJECT_NAME' as a project-vault? This will:
   - Add Obsidian frontmatter (type/description/created/project) to .md files that
     don't already have any frontmatter (idempotent — files with frontmatter are skipped)
   - Surface those docs in future SessionStart overviews and vault-search results
-  - Route project-scoped save-memory writes to the matching repo folder when one exists
+  - Route project-scoped save-memory writes to the matching project folder when one exists
   Answer y/n."
 
 YES → run both:
-  python3 "$INIT_PY" "$REPO_ROOT" --project "$PROJECT_NAME"
-  python3 "$REPO_PY" register "$REPO_ROOT" --enabled --project "$PROJECT_NAME"
+  python3 "$INIT_PY" "$PROJECT_ROOT" --project "$PROJECT_NAME"
+  python3 "$PROJECTS_PY" register "$PROJECT_ROOT" --enabled --project "$PROJECT_NAME"
 
 NO → run:
-  python3 "$REPO_PY" register "$REPO_ROOT" --no-enabled --project "$PROJECT_NAME"
+  python3 "$PROJECTS_PY" register "$PROJECT_ROOT" --no-enabled --project "$PROJECT_NAME"
 
-Either way, the answer is durable — this prompt only fires when the repo has no entry
-in ~/.config/obsidian-memory/repos.json. To revisit later, edit that file.
+Either way, the answer is durable — this prompt only fires when the project has no entry
+in ~/.config/obsidian-memory/projects.json. To revisit later, edit that file.
 
 EOF
         fi
@@ -220,7 +220,7 @@ fi
 # still has its own copy and continues to work.
 OVERVIEW_HELPER="$PLUGIN_ROOT/hooks/scripts/_overview.sh"
 if [ -n "$PLUGIN_ROOT" ] && [ -x "$OVERVIEW_HELPER" ]; then
-  OVERVIEW_OUT=$(bash "$OVERVIEW_HELPER" "$OBSIDIAN_VAULT_PATH" "$PROJECT_NAME" "$REPO_VAULT_PATH")
+  OVERVIEW_OUT=$(bash "$OVERVIEW_HELPER" "$OBSIDIAN_VAULT_PATH" "$PROJECT_NAME" "$PROJECT_VAULT_PATH")
   if [ "${OBSIDIAN_MEMORY_BOOTSTRAP_OVERVIEW:-true}" = "true" ]; then
     echo "=== VAULT OVERVIEW (auto-generated from frontmatter) ==="
     if [ -n "$OVERVIEW_OUT" ]; then

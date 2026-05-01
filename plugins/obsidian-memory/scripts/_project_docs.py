@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
-"""Repo-vault corpus enumeration for the obsidian-memory plugin.
+"""Project-vault corpus enumeration for the obsidian-memory plugin.
 
 Identifies the .md files in a project repo that participate in the
-repo-vault corpus. Shared by:
-  - init_repo_vault.py — decides which files need frontmatter backfill
-  - _vault.py runtime — walks the corpus for overview/search
-  - audit.py — flags missing frontmatter, drift, etc.
+project-vault corpus. Shared by:
+  - init_project_vault.py — decides which files need frontmatter backfill
+  - _vault.py runtime      — walks the corpus for overview/search
+  - audit.py               — flags missing frontmatter, drift, etc.
 
 Algorithm:
   1. git ls-files (tracked) + git ls-files --others --exclude-standard
@@ -15,8 +15,8 @@ Algorithm:
   4. Drop top-level dotfile dirs (.github, .vscode, .cursor, .idea, ...)
 
 CLI:
-  python3 _repo_docs.py enumerate <repo_path>           # newline-separated
-  python3 _repo_docs.py enumerate <repo_path> --json    # JSON array
+  python3 _project_docs.py enumerate <project_path>           # newline-separated
+  python3 _project_docs.py enumerate <project_path> --json    # JSON array
 
 Requires Python 3.9+.
 """
@@ -90,7 +90,7 @@ TYPE_FOLDER_PATTERNS: dict[str, tuple[str, ...]] = {
 }
 
 
-def match_type_folder(repo_path: Path | str, type_: str) -> Path | None:
+def match_type_folder(project_path: Path | str, type_: str) -> Path | None:
     """Find a folder in the repo matching the given memory type.
 
     Looks at:
@@ -100,13 +100,13 @@ def match_type_folder(repo_path: Path | str, type_: str) -> Path | None:
     Match is case-insensitive on the directory's basename. Returns the
     absolute path to the first matching folder, or None if no match.
     Used by save-memory's bucket-2 routing to decide whether a write goes
-    to the repo-vault (matching folder exists) or the personal vault
+    to the project-vault (matching folder exists) or the personal vault
     Notes/ (no match).
     """
     patterns = TYPE_FOLDER_PATTERNS.get(type_, ())
     if not patterns:
         return None
-    repo = Path(repo_path).expanduser().resolve()
+    repo = Path(project_path).expanduser().resolve()
     if not repo.is_dir():
         return None
     for tier_root in (repo, repo / "docs"):
@@ -122,17 +122,17 @@ def match_type_folder(repo_path: Path | str, type_: str) -> Path | None:
     return None
 
 
-def enumerate_repo_docs(repo_path: Path | str) -> list[Path]:
+def enumerate_project_docs(project_path: Path | str) -> list[Path]:
     """Return absolute paths of .md files in the repo's vault corpus.
 
     Sources from git (tracked + untracked-not-gitignored). Filters out
     boilerplate (LICENSE, CHANGELOG, etc.) and top-level dotfile dirs.
-    Returns [] if repo_path isn't a git repo or git isn't available.
+    Returns [] if project_path isn't a git repo or git isn't available.
 
     Enumeration is intentionally broad — runtime corpus filtering (only
     files with plugin frontmatter) happens elsewhere.
     """
-    repo = Path(repo_path).expanduser().resolve()
+    repo = Path(project_path).expanduser().resolve()
     if not repo.is_dir() or not (repo / ".git").exists():
         return []
 
@@ -152,11 +152,11 @@ def enumerate_repo_docs(repo_path: Path | str) -> list[Path]:
 
 
 def _cmd_enumerate(args: argparse.Namespace) -> int:
-    repo = Path(args.repo_path).expanduser().resolve()
+    repo = Path(args.project_path).expanduser().resolve()
     if not (repo / ".git").exists():
         print(f"not a git repo: {repo}", file=sys.stderr)
         return 1
-    paths = enumerate_repo_docs(repo)
+    paths = enumerate_project_docs(repo)
     if args.json:
         print(json.dumps([str(p.relative_to(repo)) for p in paths], indent=2))
     else:
@@ -166,7 +166,7 @@ def _cmd_enumerate(args: argparse.Namespace) -> int:
 
 
 def _cmd_match_type_folder(args: argparse.Namespace) -> int:
-    repo = Path(args.repo_path).expanduser().resolve()
+    repo = Path(args.project_path).expanduser().resolve()
     folder = match_type_folder(repo, args.type)
     if folder is None:
         if args.json:
@@ -189,13 +189,13 @@ def main(argv: list[str] | None = None) -> int:
     sub = ap.add_subparsers(dest="cmd", required=True)
 
     ep = sub.add_parser("enumerate", help="list .md files in the repo's vault corpus")
-    ep.add_argument("repo_path", help="path to the project repo")
+    ep.add_argument("project_path", help="path to the project's git repo")
     ep.add_argument("--json", action="store_true", help="emit JSON array")
     ep.set_defaults(func=_cmd_enumerate)
 
     mp = sub.add_parser("match-type-folder",
                         help="find a repo folder matching a memory type (decision/learning/reference)")
-    mp.add_argument("repo_path", help="path to the project repo")
+    mp.add_argument("project_path", help="path to the project's git repo")
     mp.add_argument("--type", required=True,
                     choices=("decision", "learning", "reference", "preference", "tool", "journal"),
                     help="memory type to match")

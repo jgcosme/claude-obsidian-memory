@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
-"""Initialize a project repo's docs as a repo-vault corpus.
+"""Initialize a project's docs as a project-vault corpus.
 
-For each .md file enumerated by _repo_docs.enumerate_repo_docs that lacks
-ANY frontmatter, prepend an Obsidian-style frontmatter block with:
-  type, description, created, project
+For each .md file enumerated by _project_docs.enumerate_project_docs
+that lacks ANY frontmatter, prepend an Obsidian-style frontmatter block
+with: type, description, created, project
 
 Files that already have a frontmatter block (of any kind — plugin,
 Claude Code skill, slash command, etc.) are left untouched. This makes
@@ -24,9 +24,9 @@ Description inference:
   refine this; the fallback always uses the H1.
 
 CLI:
-  python3 init_repo_vault.py <repo_path> --project <name>
-  python3 init_repo_vault.py <repo_path> --project <name> --dry-run
-  python3 init_repo_vault.py <repo_path> --project <name> --no-llm
+  python3 init_project_vault.py <project_path> --project <name>
+  python3 init_project_vault.py <project_path> --project <name> --dry-run
+  python3 init_project_vault.py <project_path> --project <name> --no-llm
 
 Requires Python 3.9+.
 """
@@ -44,7 +44,7 @@ from datetime import date
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from _repo_docs import enumerate_repo_docs  # noqa: E402
+from _project_docs import enumerate_project_docs  # noqa: E402
 from _vault import FRONTMATTER_RE  # noqa: E402
 
 VALID_TYPES = ("preference", "reference", "decision", "learning", "tool", "journal")
@@ -253,19 +253,19 @@ def _write_file(path: Path, frontmatter: str, body: str) -> None:
 # ---------------------------------------------------------------------------
 # Top-level
 # ---------------------------------------------------------------------------
-def init_repo_vault(
-    repo_path: Path,
+def init_project_vault(
+    project_path: Path,
     *,
     project: str,
     dry_run: bool = False,
     use_llm: bool = True,
 ) -> dict:
-    """Add plugin frontmatter to candidate .md files in repo_path.
+    """Add plugin frontmatter to candidate .md files in project_path.
 
     Returns: {"added": [{path, type, description}], "skipped": [{path, reason}]}
     """
-    repo = Path(repo_path).expanduser().resolve()
-    md_files = enumerate_repo_docs(repo)
+    repo = Path(project_path).expanduser().resolve()
+    md_files = enumerate_project_docs(repo)
 
     candidates: list[tuple[Path, str]] = []
     skipped: list[dict] = []
@@ -319,7 +319,7 @@ def main(argv: list[str] | None = None) -> int:
         description=__doc__,
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
-    ap.add_argument("repo_path", help="path to the project repo")
+    ap.add_argument("project_path", help="path to the project's git repo")
     ap.add_argument("--project", required=True, help="project name (e.g., repo basename)")
     ap.add_argument("--dry-run", action="store_true", help="print plan without writing")
     ap.add_argument("--no-llm", action="store_true",
@@ -327,12 +327,12 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--json", action="store_true", help="emit JSON result instead of text")
     args = ap.parse_args(argv)
 
-    repo = Path(args.repo_path).expanduser().resolve()
+    repo = Path(args.project_path).expanduser().resolve()
     if not (repo / ".git").exists():
         print(f"not a git repo: {repo}", file=sys.stderr)
         return 1
 
-    result = init_repo_vault(
+    result = init_project_vault(
         repo,
         project=args.project,
         dry_run=args.dry_run,

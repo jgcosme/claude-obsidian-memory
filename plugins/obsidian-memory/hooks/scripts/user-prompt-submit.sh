@@ -106,22 +106,22 @@ fi
 # mtime-invalidated cache so successive turns reuse the same overview when
 # the vault hasn't changed — avoiding a full vault walk per prompt.
 #
-# Repo-vault path was resolved by SessionStart and persisted to
-# /tmp/.../$SAFE_SID.repo_vault. We just re-read it here to avoid the
+# Project-vault path was resolved by SessionStart and persisted to
+# /tmp/.../$SAFE_SID.project_vault. We just re-read it here to avoid the
 # per-turn cost of re-querying the registry + git toplevel.
 # ---------------------------------------------------------------------------
-REPO_VAULT_PATH=""
+PROJECT_VAULT_PATH=""
 if [ -n "$SESSION_ID" ]; then
   SAFE_SID=$(echo "$SESSION_ID" | tr -c 'A-Za-z0-9._-' '_')
   STATE_DIR="${MEMORY_SESSION_STATE_DIR:-/tmp/claude-memory-session}"
-  if [ -f "$STATE_DIR/$SAFE_SID.repo_vault" ]; then
-    REPO_VAULT_PATH=$(head -1 "$STATE_DIR/$SAFE_SID.repo_vault" 2>/dev/null || echo "")
-    [ -d "$REPO_VAULT_PATH" ] || REPO_VAULT_PATH=""
+  if [ -f "$STATE_DIR/$SAFE_SID.project_vault" ]; then
+    PROJECT_VAULT_PATH=$(head -1 "$STATE_DIR/$SAFE_SID.project_vault" 2>/dev/null || echo "")
+    [ -d "$PROJECT_VAULT_PATH" ] || PROJECT_VAULT_PATH=""
   fi
 fi
 
 OVERVIEW_HELPER="$PLUGIN_ROOT/hooks/scripts/_overview.sh"
-OVERVIEW=$(bash "$OVERVIEW_HELPER" "$VAULT" "$PROJECT_NAME" "$REPO_VAULT_PATH" 2>/dev/null || true)
+OVERVIEW=$(bash "$OVERVIEW_HELPER" "$VAULT" "$PROJECT_NAME" "$PROJECT_VAULT_PATH" 2>/dev/null || true)
 if [ -z "$OVERVIEW" ]; then
   echo "[$(ts)] skipped: vault overview empty" >> "$LOG"
   exit 0

@@ -42,7 +42,7 @@ from _vault import (  # noqa: E402
     parse_frontmatter,
     resolve_vault,
 )
-from _repo_docs import enumerate_repo_docs  # noqa: E402
+from _project_docs import enumerate_project_docs  # noqa: E402
 
 WIKILINK_RE = re.compile(r"\[\[([^\]]+)\]\]")
 
@@ -107,7 +107,7 @@ def _audit_corpus(label: str, root: Path, files: list[Path], *, project_required
     """Run integrity checks against a single corpus.
 
     project_required: when True, every note must have `project:` (used for
-    repo-vault corpora where save-memory always sets it). When False, only
+    project-vault corpora where save-memory always sets it). When False, only
     notes under `Projects/` need it (the personal-vault legacy convention).
     """
     basename_map: dict[str, list[Path]] = {}
@@ -224,7 +224,7 @@ def _print_corpus(report: dict) -> None:
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--vault", help="path to Obsidian vault (overrides config)")
-    ap.add_argument("--repo-vault", help="also audit this repo-vault corpus (path to project repo)")
+    ap.add_argument("--project-vault", help="also audit this project-vault corpus (path to the project's git repo)")
     ap.add_argument("--json", action="store_true", help="emit JSON instead of markdown")
     args = ap.parse_args()
 
@@ -235,21 +235,21 @@ def main() -> int:
 
     reports: list[dict] = []
     reports.append(_audit_corpus(
-        label="personal" if args.repo_vault else "",
+        label="personal" if args.project_vault else "",
         root=vault,
         files=collect_md_files(vault),
         project_required=False,
     ))
 
-    if args.repo_vault:
-        repo_root = Path(args.repo_vault).expanduser().resolve()
-        if not repo_root.is_dir():
-            print(f"repo-vault not found at: {repo_root}", file=sys.stderr)
+    if args.project_vault:
+        project_root = Path(args.project_vault).expanduser().resolve()
+        if not project_root.is_dir():
+            print(f"project-vault not found at: {project_root}", file=sys.stderr)
             return 1
         reports.append(_audit_corpus(
-            label=f"repo:{repo_root.name}",
-            root=repo_root,
-            files=enumerate_repo_docs(repo_root),
+            label=f"project:{project_root.name}",
+            root=project_root,
+            files=enumerate_project_docs(project_root),
             project_required=True,
         ))
 
