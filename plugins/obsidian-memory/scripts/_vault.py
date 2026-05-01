@@ -172,7 +172,7 @@ def search(
                 score = 1
             hits.append((score, {
                 "corpus": corpus_label,
-                "path": rel_str,
+                "path": str(f),
                 "type": fm.get("type", ""),
                 "description": fm.get("description", ""),
                 "project": fm.get("project", ""),
@@ -190,12 +190,12 @@ def search(
 # ---------------------------------------------------------------------------
 # Overview generation (for SessionStart)
 # ---------------------------------------------------------------------------
-def _bullet(rel: str, fm: dict[str, str]) -> str:
+def _bullet(path: Path, fm: dict[str, str]) -> str:
     desc = fm.get("description", "").strip()
-    # Use Obsidian-style wikilink (basename without .md) so the overview
-    # reads naturally to humans browsing the conversation transcript too.
-    target = rel[:-3] if rel.endswith(".md") else rel
-    base = f"- [[{target}]]"
+    # Emit absolute paths so the gate can copy them verbatim into `read`
+    # without per-vault root resolution downstream — collisions become
+    # impossible and the validator collapses to `[ -f "$p" ]`.
+    base = f"- {path}"
     return f"{base} — {desc}" if desc else base
 
 
@@ -236,7 +236,7 @@ def overview(vault: Path, project: str | None = None, mode: str = "full") -> str
     tools = by_prefix("Tools/")
     if tools:
         for f, fm in tools:
-            out.append(_bullet(str(f.relative_to(vault)), fm))
+            out.append(_bullet(f, fm))
     else:
         out.append("_(empty)_")
     out.append("")
@@ -270,7 +270,7 @@ def overview(vault: Path, project: str | None = None, mode: str = "full") -> str
         for type_ in ordered_types:
             out.append(f"#### {type_}")
             for f, fm in by_type[type_]:
-                out.append(_bullet(str(f.relative_to(vault)), fm))
+                out.append(_bullet(f, fm))
 
     if mode == "tools-and-general":
         out.append("## Notes (general)")
@@ -326,7 +326,7 @@ def overview(vault: Path, project: str | None = None, mode: str = "full") -> str
         scoped.sort(key=_key, reverse=True)
         out.append(label)
         for f, fm in scoped[:_RECENT_JOURNAL_LIMIT]:
-            out.append(_bullet(str(f.relative_to(vault)), fm))
+            out.append(_bullet(f, fm))
         if len(scoped) > _RECENT_JOURNAL_LIMIT:
             out.append(f"_(+{len(scoped) - _RECENT_JOURNAL_LIMIT} older — search by `created:` date)_")
         out.append("")
@@ -362,8 +362,7 @@ def overview_project(project_vault: Path, project: str | None = None) -> str:
         items = sorted(by_type[type_], key=lambda x: x[0])
         out.append(f"## {type_}")
         for f, fm in items:
-            rel = str(f.relative_to(project_vault))
-            out.append(_bullet(rel, fm))
+            out.append(_bullet(f, fm))
         out.append("")
 
     return "\n".join(out)

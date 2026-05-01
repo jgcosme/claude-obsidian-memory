@@ -134,9 +134,9 @@ fi
 # quote pairs. Do NOT use apostrophes in the prompt text — they break parsing.
 # Phrase around them ("the bullet's X" → "the X in a bullet").
 GATE_SYSTEM_PROMPT=$(cat <<PROMPT
-Retrieval gate for an Obsidian vault. Default to {}; inject only when a specific note demonstrably helps. Output ONE JSON object on a single line, no prose. \`read\` paths must include the \`.md\` extension and come from the overview below.
+Retrieval gate for an Obsidian vault. Default to {}; inject only when a specific note demonstrably helps. Output ONE JSON object on a single line, no prose. \`read\` paths are absolute filesystem paths copied verbatim from the overview below.
 
-{"read":["path.md"], "search":[{"type":"...","keywords":"...","path_prefix":"...","created_after":"YYYY-MM-DD","created_before":"YYYY-MM-DD"}]}
+{"read":["/abs/path/to/note.md"], "search":[{"type":"...","keywords":"...","path_prefix":"...","created_after":"YYYY-MM-DD","created_before":"YYYY-MM-DD"}]}
 
 Both optional. Cap $PATH_CAP paths.
 
@@ -146,17 +146,17 @@ INJECT when:
 - user proposes or imperatively does something covered by a guardrail in the overview (decision/learning/preference) OR names a task a tool note covers ("send a message" → Slack)
 - user asks about a category over time (use \`search\` with \`type\`)
 
-SKIP: meta about the agent/gate/prompts; greetings or short replies; generic tech questions; clean imperatives with no overview-flagged constraint; hypotheticals about absent topics; anything the overview itself answers. If 50/50, output {}.
+SKIP: greetings or short replies; generic tech questions; clean imperatives with no overview-flagged constraint; hypotheticals about absent topics; anything the overview itself answers. If 50/50, output {}.
 
-Examples:
+Examples (replace /abs/path with the actual absolute paths shown in the overview):
 "thanks" → {}
 "how would you tune X?" → {}
 "delete the foo note" → {}
 "add a colors module" → {}
 "what would we decide if we needed kubernetes?" → {}
-"send a message to #eng" → {"read":["Tools/Slack.md"]}
-"add the api token to Tools/X.md" → {"read":["Notes/secrets-env.md"]}
-"remind me about the secrets pattern" → {"read":["Notes/secrets-env.md"]}
+"send a message to #eng" → {"read":["/abs/path/Tools/Slack.md"]}
+"add the api token to Tools/X.md" → {"read":["/abs/path/Notes/secrets-env.md"]}
+"remind me about the secrets pattern" → {"read":["/abs/path/Notes/secrets-env.md"]}
 "what learnings this week?" → {"search":[{"type":"learning","created_after":"2026-04-22"}]}
 
 === VAULT OVERVIEW ===
@@ -322,15 +322,18 @@ TMP=$(mktemp)
 trap 'rm -f "$TMP"' EXIT
 
 is_safe_path() {
+  # Paths from the overview are absolute, and must resolve under one of the
+  # known vault roots. Reject anything that isn't absolute, contains "..",
+  # or escapes both roots — the gate output is model-generated, not user-
+  # controlled, but a sanity check is cheap insurance.
   local p="$1"
-  case "$p" in /*) return 1 ;; esac
-  local IFS='/'
-  set -f
-  for comp in $p; do
-    [ "$comp" = ".." ] && return 1
-  done
-  set +f
-  return 0
+  case "$p" in /*) ;; *) return 1 ;; esac
+  case "$p" in *..*) return 1 ;; esac
+  case "$p" in "$VAULT"/*) return 0 ;; esac
+  if [ -n "${PROJECT_VAULT_PATH:-}" ]; then
+    case "$p" in "$PROJECT_VAULT_PATH"/*) return 0 ;; esac
+  fi
+  return 1
 }
 
 already_injected() {
@@ -353,7 +356,7 @@ while IFS= read -r p; do
     DROPPED+=("$p (unsafe)")
     continue
   fi
-  if [ ! -f "$VAULT/$p" ]; then
+  if [ ! -f "$p" ]; then
     DROPPED+=("$p (missing)")
     continue
   fi
@@ -364,10 +367,10 @@ while IFS= read -r p; do
   {
     echo ""
     echo "--- $p ---"
-    head -c "$NOTE_BYTE_CAP" "$VAULT/$p"
-    note_size=$(wc -c < "$VAULT/$p" 2>/dev/null | tr -d ' ' || echo 0)
+    head -c "$NOTE_BYTE_CAP" "$p"
+    note_size=$(wc -c < "$p" 2>/dev/null | tr -d ' ' || echo 0)
     if [ "${note_size:-0}" -gt "$NOTE_BYTE_CAP" ]; then
-      printf '\n[…truncated at %s bytes; full content via Read of %s]\n' "$NOTE_BYTE_CAP" "$VAULT/$p"
+      printf '\n[…truncated at %s bytes; full content via Read of %s]\n' "$NOTE_BYTE_CAP" "$p"
     fi
   } >> "$TMP"
   mark_injected "$p"

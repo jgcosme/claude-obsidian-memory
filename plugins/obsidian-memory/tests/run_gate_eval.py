@@ -163,7 +163,9 @@ def evaluate(prompt: str, overview: str, cases: dict, limit: int | None = None) 
         out = r["out"] or {}
         read_paths = set(out.get("read") or [])
         searches = out.get("search") or []
-        expect = set(r["case"].get("expect_any_of") or [])
+        # cases.json keeps relative paths for portability; rebase to absolute
+        # against the fixture vault so they match the overview's paths.
+        expect = {str(FIXTURE_VAULT / p) for p in (r["case"].get("expect_any_of") or [])}
         expect_search = r["case"].get("expect_search")
         search_ok = r["case"].get("search_ok", False)
 
