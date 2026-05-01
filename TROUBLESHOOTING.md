@@ -43,6 +43,12 @@ Reports config, vault, prereqs, plugin scripts, search smoke-test, overview cach
 **I want to disable auto-commit**
 - Set `OBSIDIAN_MEMORY_AUTOCOMMIT=false` in `~/.config/obsidian-memory/config.env`. Commit manually instead.
 
+**Project-vault docs aren't appearing in the overview**
+- Run `/obsidian-memory:project list` and confirm the repo shows `[on]`. If it shows `[off]`, run `/obsidian-memory:project enable` from inside the repo. If it's missing entirely, the registration prompt was never answered — start a fresh session in the repo or run `enable` directly.
+- The registry keys on the repo's git toplevel (`git rev-parse --show-toplevel`). If you've moved the repo, the old path is stale; `remove` it and re-`enable` from the new location.
+- Confirm the docs aren't all boilerplate (`LICENSE*`, `CHANGELOG*`, `CODE_OF_CONDUCT*`, `SECURITY*`, top-level dotfile dirs) — those are filtered out of the corpus.
+- Project-vault notes need plugin frontmatter to appear in the overview. `init_project_vault.py` runs silently each SessionStart for enabled repos and backfills any new files; if a file is missing from the overview, check that it has `type:`/`description:`/`created:`/`project:` in its frontmatter.
+
 **Scanning the vault for leaked credentials**
 
 ```bash

@@ -71,6 +71,7 @@ gh repo create my-obsidian-memory --private --source "$HOME/Documents/Obsidian M
 | `/obsidian-memory:status` | Health check: config, vault, prereqs, scripts, recent activity. |
 | `/obsidian-memory:usage` | Per-kind token breakdown + plugin's share of this session's tokens. |
 | `/obsidian-memory:audit` | Whole-corpus integrity: frontmatter, broken wikilinks, orphans, duplicate basenames, frontmatter backfill, description-vs-body drift. Operates on the personal vault and the current project's project-vault when registered. |
+| `/obsidian-memory:project [enable\|disable\|remove\|list]` | Manage project-vault registrations. With no verb, walks a guided picker over the registry + current cwd. See [Federated project-vaults](#federated-project-vaults). |
 
 ## Visibility
 
@@ -129,6 +130,8 @@ Register 'my-project' as a project-vault?
 
 - **Yes** → `init_project_vault.py` adds plugin frontmatter (`type/description/created/project`) to `.md` files that don't already have any frontmatter. The repo is recorded in `~/.config/obsidian-memory/projects.json` as `enabled`. Future sessions surface those docs in the auto-overview alongside the personal vault.
 - **No** → recorded as `disabled`. No frontmatter added, no overview block. The prompt won't fire again for this repo.
+
+You can also register, disable, or remove a repo at any time with `/obsidian-memory:project enable` (or `disable` / `remove` / `list`) from inside the repo — useful if you said "no" earlier and changed your mind, or want to opt in a repo without starting a fresh session.
 
 The corpus is whatever `git ls-files` surfaces (tracked + untracked-not-gitignored), minus boilerplate (`LICENSE`, `CHANGELOG`, `.github/` templates, etc.). No persisted file list — the corpus is recomputed every session, so docs added or moved between sessions are picked up automatically.
 
