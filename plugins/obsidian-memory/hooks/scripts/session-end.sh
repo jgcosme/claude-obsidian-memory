@@ -22,7 +22,7 @@ if [ -f "$CONFIG_FILE" ]; then
   . "$CONFIG_FILE"
 fi
 
-VAULT="${OBSIDIAN_VAULT_PATH:-$HOME/Documents/Obsidian Vault}"
+VAULT="${OBSIDIAN_VAULT_PATH:-$HOME/Documents/Obsidian Memory}"
 LOG="${MEMORY_REVIEW_LOG:-/tmp/claude-memory-review.log}"
 LOG_MAX_BYTES="${MEMORY_LOG_MAX_BYTES:-1048576}"  # 1 MB default
 AUTOCOMMIT="${OBSIDIAN_MEMORY_AUTOCOMMIT:-true}"
@@ -112,15 +112,7 @@ if [ ! -d "$VAULT" ]; then
   exit 0
 fi
 
-# Whether to run the journal/review step. The user is asked at SessionStart
-# before scaffolding Projects/<name>/, so its absence here means they declined
-# (or never set it up). In that case, skip the review but still autocommit any
-# General/Tools writes the session produced.
 RUN_REVIEW=true
-if [ ! -d "$VAULT/Projects/$PROJECT_NAME" ]; then
-  RUN_REVIEW=false
-  echo "[$(date '+%Y-%m-%d %H:%M:%S')] no Projects/$PROJECT_NAME/ folder; skipping review, will still commit dirty vault state" >> "$LOG"
-fi
 if [ "${OBSIDIAN_MEMORY_REVIEW_ENABLED:-true}" != "true" ]; then
   RUN_REVIEW=false
   echo "[$(date '+%Y-%m-%d %H:%M:%S')] OBSIDIAN_MEMORY_REVIEW_ENABLED=false; skipping review, will still commit dirty vault state" >> "$LOG"
@@ -157,20 +149,19 @@ Do steps 1-3 first. Step 4 (the journal) is written last so its bullets can refe
 
 1. PROACTIVE NOTES — capture moments in the transcript where information surfaces that is stable across sessions, useful in future sessions, and not derivable from the codebase or git history. Covers corrections, preferences, validated approaches, always / from now on / stop doing X rules, decisions and rationale, and novel facts (people, IDs, configs, channels, dashboards, endpoints). Skip if already covered (verify via `python3 __PLUGIN_ROOT__/scripts/_vault.py --vault __VAULT__ search --type <t> --keywords <k> --json`; extend a near-duplicate rather than creating a new note).
 
-   Three buckets. Pick exactly one per candidate:
+   Pick the type first (one of: preference, reference, decision, learning, tool — never journal here, journal is step 4). Then route:
 
-   1. Personal / cross-project → vault.
-      Subfolders: General/Preferences/, General/References/, Tools/, General/People/.
+     A. type == tool       → __VAULT__/Tools/<slug>.md
+     B. type == preference → __VAULT__/Notes/<slug>.md  (add `project: __PROJECT_NAME__` only if narrowly scoped)
+     C. type ∈ {reference, decision, learning}:
+        1. If __PROJECT_DIR__ is registered + enabled in projects.json
+           (check via `python3 __PLUGIN_ROOT__/scripts/_projects.py lookup __PROJECT_DIR__`)
+           AND has a folder matching the type
+           (check via `python3 __PLUGIN_ROOT__/scripts/_project_docs.py match-type-folder __PROJECT_DIR__ --type <type>`):
+             → __PROJECT_DIR__/<matched-folder>/<slug>.md  (with project: from the registry)
+        2. Otherwise → __VAULT__/Notes/<slug>.md  (with `project: __PROJECT_NAME__` if project-scoped)
 
-   2. Project-related AND project has internal docs (docs/, ADR folders, mkdocs/sphinx, CONTRIBUTING) → reflect upstream in __PROJECT_DIR__. No vault note.
-      Allowed paths: docs/ tree, ADR folders, *.md under docs/. Never source, configs, CI, or manifests.
-      WIP guard: `git -C __PROJECT_DIR__ status --porcelain -- <target>`. Non-empty → skip and record under "## Integrity flags".
-      Else write the edit as uncommitted working-tree changes. Don't git add / commit / push / branch.
-      List each repo write under "## Project repo writes".
-
-   3. Project-related AND no project docs → substantive vault note at Projects/__PROJECT_NAME__/{Decisions,Learnings}/<slug>.md.
-
-   Frontmatter on every new vault note: type, description, created (+ project for project-scoped). type ∈ {preference, reference, decision, learning, tool, people}.
+   Frontmatter on every new note: type, description, created (+ project when scoped). type ∈ {preference, reference, decision, learning, tool}.
 
    Always wrap the `description:` value in double quotes (e.g. `description: "one-line hook"`). Descriptions often contain `:`, `[[wikilinks]]`, or `[brackets]` — unquoted, these break YAML parsing. Escape any embedded `"` as `\"`. This rule also applies when you rewrite an existing note's `description` (step 2) or the journal's day-summary `description` (step 4).
 
@@ -188,7 +179,7 @@ Do steps 1-3 first. Step 4 (the journal) is written last so its bullets can refe
 
    Per-source checks:
 
-   - (a) + (b): frontmatter completeness (type, description, created; + project under Projects/); every [[wikilink]] resolves; description-vs-body drift (rewrite description on drift, smallest edit).
+   - (a) + (b): frontmatter completeness (type, description, created; + project when project-scoped); every [[wikilink]] resolves; description-vs-body drift (rewrite description on drift, smallest edit).
 
    - (c) Vault file changes — BACKLINK RECONCILIATION:
        * RENAMED (old → new) → `python3 __PLUGIN_ROOT__/scripts/_vault.py --vault __VAULT__ incoming-wikilinks --target <old>` to find every note linking to the OLD path. Auto-rewrite each occurrence to the NEW path (smallest edit; preserve any |alias text). For bare basename links, prefer the new basename. List rewrites under "## Backlink rewrites".
@@ -198,7 +189,7 @@ Do steps 1-3 first. Step 4 (the journal) is written last so its bullets can refe
    Auto-fix unambiguous issues (description drift, backlink-rename). List ambiguous and non-fixable items in their dedicated sections.
 
 4. JOURNAL — always, written LAST.
-   Path: Projects/__PROJECT_NAME__/Journal/__TODAY__.md
+   Path: __VAULT__/Journals/__TODAY__.md
 
    New file: frontmatter (type=journal, description=<one-line day summary>, project=__PROJECT_NAME__, created=__TODAY__) + "## Session __NOW__" + 3-6 bullets covering work, decisions, learnings.
 
@@ -206,13 +197,13 @@ Do steps 1-3 first. Step 4 (the journal) is written last so its bullets can refe
 
    Each bullet that describes a write must include the path:
    - Vault writes (steps 1-2) → vault-relative path.
-   - Project-repo writes (bucket 2 from step 1) → repo-relative path.
+   - Project-vault writes (step 1, route C.1) → repo-relative path inside __PROJECT_DIR__.
    The journal is the cross-session anchor; paths in bullets are how future sessions find the work.
 
 OUTPUT sections (in order, omit when empty):
-  ## Vault writes              (paths created/appended)
-  ## Project repo writes       (paths in __PROJECT_DIR__)
-  ## Backlink rewrites         (vault notes whose [[wikilinks]] were updated for renames)
+  ## Vault writes              (paths created/appended in the personal vault)
+  ## Project-vault writes      (paths in __PROJECT_DIR__'s registered project-vault)
+  ## Backlink rewrites         (notes whose [[wikilinks]] were updated for renames)
   ## Broken backlinks (target deleted)
   ## Integrity flags           (everything ambiguous or deferred)
 

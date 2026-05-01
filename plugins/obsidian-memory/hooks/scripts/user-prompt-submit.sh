@@ -31,7 +31,7 @@ if [ -f "$CONFIG_FILE" ]; then
   . "$CONFIG_FILE" 2>/dev/null || true
 fi
 
-VAULT="${OBSIDIAN_VAULT_PATH:-$HOME/Documents/Obsidian Vault}"
+VAULT="${OBSIDIAN_VAULT_PATH:-$HOME/Documents/Obsidian Memory}"
 PLUGIN_ROOT="${CLAUDE_PLUGIN_ROOT:-}"
 LOG="${MEMORY_GATE_LOG:-/tmp/claude-memory-gate.log}"
 LOG_MAX_BYTES="${MEMORY_LOG_MAX_BYTES:-1048576}"

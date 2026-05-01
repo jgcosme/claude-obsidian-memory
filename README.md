@@ -61,7 +61,7 @@ Idempotent. Verifies prerequisites and creates the vault, config, and a `chmod 6
 Optional — push the vault to a private GitHub remote so it follows you across machines:
 
 ```bash
-gh repo create my-obsidian-vault --private --source "$HOME/Documents/Obsidian Vault" --remote origin --push
+gh repo create my-obsidian-memory --private --source "$HOME/Documents/Obsidian Memory" --remote origin --push
 ```
 
 ## Slash commands
@@ -90,15 +90,17 @@ The `• <project>` appears whenever the current repo is registered as a project
 
 ## Vault structure
 
+The plugin owns its own Obsidian vault — by default at `~/Documents/Obsidian Memory`. Three top-level folders, plus a README:
+
 ```
-Obsidian Vault/
+Obsidian Memory/
 ├── README.md          — prose orientation (always loaded)
 ├── Tools/<tool>.md    — CLI/API references; browsed by tool name
 ├── Journals/          — one entry per session, written by SessionEnd
 └── Notes/             — everything else; searched by frontmatter
 ```
 
-Three top-level folders. Project scoping is via the `project:` frontmatter field, not folder hierarchy — a `Notes/auth-decision.md` with `project: my-app` is project-scoped without needing a `Projects/my-app/` wrapper.
+Project scoping is via the `project:` frontmatter field, not folder hierarchy — a `Notes/auth-decision.md` with `project: my-app` is project-scoped without needing a `Projects/my-app/` wrapper.
 
 Frontmatter on every note (except `README.md` files):
 
@@ -113,7 +115,7 @@ project: <project-name>     # only when the note is project-scoped
 
 Six types. `type` lives in frontmatter; the auto-overview groups by `type:` rather than by folder, so the layout stays browsable while staying flat.
 
-**Pre-v1.6 vaults** keep their original `General/Preferences/`, `Projects/<name>/Decisions/` layout — existing notes work as-is, the gate finds them, audit checks them. New writes (from v1.6+ save-memory) go to the new flat structure. Migration is a manual operation when you want it, not forced.
+If you already have your own Obsidian vault, the plugin's vault sits beside it as a separate top-level vault. Open whichever one you want in Obsidian.app — the plugin only reads/writes inside its own vault.
 
 ## Federated project-vaults
 
@@ -160,7 +162,7 @@ Edit `~/.config/obsidian-memory/config.env`:
 
 | Variable | Default | Purpose |
 |---|---|---|
-| `OBSIDIAN_VAULT_PATH` | `$HOME/Documents/Obsidian Vault` | vault path |
+| `OBSIDIAN_VAULT_PATH` | `$HOME/Documents/Obsidian Memory` | vault path |
 | `CLAUDE_BIN` | auto-detected | `claude` binary used by `SessionEnd` review and the gate |
 | `OBSIDIAN_MEMORY_AUTOCOMMIT` | `true` | git commit vault changes after review |
 | `OBSIDIAN_MEMORY_AUTOPUSH` | `false` | push after auto-commit |
@@ -244,7 +246,7 @@ Run `/obsidian-memory:usage` to see the breakdown plus the plugin's share of tot
 For full cleanup (data, config, logs):
 
 ```bash
-rm -rf "$HOME/Documents/Obsidian Vault"
+rm -rf "$HOME/Documents/Obsidian Memory"
 rm -rf "$HOME/.config/obsidian-memory"
 rm -f /tmp/claude-memory-review.log{,.1} /tmp/claude-memory-gate.log{,.1}
 rm -rf /tmp/claude-memory-gate-state /tmp/claude-memory-usage

@@ -39,6 +39,19 @@ from _project_docs import enumerate_project_docs  # noqa: E402
 # Vault path resolution
 # ---------------------------------------------------------------------------
 def resolve_vault(cli_vault: str | None = None) -> Path:
+    """Resolve the plugin's vault dir.
+
+    Resolution order:
+      1. --vault flag
+      2. $OBSIDIAN_VAULT_PATH env var
+      3. OBSIDIAN_VAULT_PATH= in ~/.config/obsidian-memory/config.env
+      4. Default: ~/Documents/Obsidian Memory
+
+    The vault is the plugin's own dir — it owns the whole tree, including
+    .git, README, and the three top-level folders (Tools, Journals, Notes).
+    Default lives at "Obsidian Memory" so it parallels but doesn't collide
+    with a user's existing Obsidian vault at "Obsidian Vault".
+    """
     if cli_vault:
         return Path(os.path.expanduser(cli_vault)).resolve()
     if os.environ.get("OBSIDIAN_VAULT_PATH"):
@@ -50,7 +63,7 @@ def resolve_vault(cli_vault: str | None = None) -> Path:
             if line.startswith("OBSIDIAN_VAULT_PATH="):
                 v = line.split("=", 1)[1].strip().strip('"').strip("'")
                 return Path(os.path.expanduser(v)).resolve()
-    return (Path.home() / "Documents/Obsidian Vault").resolve()
+    return (Path.home() / "Documents/Obsidian Memory").resolve()
 
 
 # ---------------------------------------------------------------------------

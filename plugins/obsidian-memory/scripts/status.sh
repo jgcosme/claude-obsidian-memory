@@ -10,7 +10,7 @@ if [ -f "$CONFIG_FILE" ]; then
   ( set +u; . "$CONFIG_FILE" ) >/dev/null 2>&1 && . "$CONFIG_FILE" 2>/dev/null || true
 fi
 
-VAULT="${OBSIDIAN_VAULT_PATH:-$HOME/Documents/Obsidian Vault}"
+VAULT="${OBSIDIAN_VAULT_PATH:-$HOME/Documents/Obsidian Memory}"
 # Self-locate: prefer $CLAUDE_PLUGIN_ROOT, otherwise derive from this script's path.
 # This makes status.sh work whether invoked through a slash command (env may or
 # may not be set) or directly from a shell.

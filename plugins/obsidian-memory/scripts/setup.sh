@@ -37,7 +37,7 @@ if [ -f "$CONFIG_FILE" ]; then
   fi
 fi
 
-VAULT_PATH="${OBSIDIAN_VAULT_PATH:-$HOME/Documents/Obsidian Vault}"
+VAULT_PATH="${OBSIDIAN_VAULT_PATH:-$HOME/Documents/Obsidian Memory}"
 TODAY=$(date +%Y-%m-%d)
 
 echo "obsidian-memory setup"
@@ -123,16 +123,17 @@ else
 fi
 
 # ---------------------------------------------------------------------------
-# 3. Vault scaffold — base directory layout
+# 3. Vault scaffold — three top-level folders. Project scoping is via the
+# `project:` frontmatter tag, not folder hierarchy.
 # ---------------------------------------------------------------------------
 mkdir -p "$VAULT_PATH"
 mkdir -p "$VAULT_PATH/Tools"
-mkdir -p "$VAULT_PATH/General/Preferences" "$VAULT_PATH/General/People" "$VAULT_PATH/General/Admin" "$VAULT_PATH/General/References"
-mkdir -p "$VAULT_PATH/Projects"
+mkdir -p "$VAULT_PATH/Journals"
+mkdir -p "$VAULT_PATH/Notes"
 
 # ---------------------------------------------------------------------------
-# 4. Render templates recursively, skipping per-project templates and metadata.
-# Substitutes __TODAY__ and __VAULT_PATH__ in every rendered note.
+# 4. Render templates recursively. Substitutes __TODAY__ and __VAULT_PATH__
+# in every rendered note.
 # ---------------------------------------------------------------------------
 render() {
   local src="$1"
@@ -149,14 +150,10 @@ render() {
   echo "[+] $dst"
 }
 
-# Walk templates/ — anything that's not under Projects/PROJECT_NAME/ (per-project
-# scaffold, applied lazily by SessionStart) or a .gitignore (handled separately)
-# gets rendered into the vault preserving its relative path.
 TEMPLATES_DIR="$PLUGIN_ROOT/templates"
 while IFS= read -r src; do
   rel="${src#"$TEMPLATES_DIR"/}"
   case "$rel" in
-    Projects/*) continue ;;       # per-project, scaffolded by SessionStart
     .gitignore) continue ;;       # handled below
   esac
   render "$src" "$VAULT_PATH/$rel"
@@ -212,5 +209,5 @@ echo "  1. (Optional) Open the vault in Obsidian.app: open -a Obsidian \"$VAULT_
 echo "  2. (Optional but recommended) Init git in the vault for change-tracking + auto-commit:"
 echo "       cd \"$VAULT_PATH\" && git init -b main && git add -A && git commit -m 'Initial commit'"
 echo "  3. Edit $CONFIG_FILE to override defaults (vault path, gate behavior, autocommit/push)."
-echo "  4. cd into a project directory and start a Claude session — when prompted, answer 'yes'"
-echo "     to scaffold that project's vault folder. Claude prefills it from real evidence in the repo."
+echo "  4. cd into a project repo and start a Claude session — when prompted, answer 'yes'"
+echo "     to register it as a project-vault (or run /obsidian-memory:project enable later)."

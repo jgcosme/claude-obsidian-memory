@@ -23,8 +23,7 @@ The plugin runs three hooks across the Claude Code session lifecycle.
 5. Injects into context:
    - **Bootstrap instructions** — vault path + two-line skill pointers (`vault-search` for body-level lookups the gate's description-match misses, `save-memory` for writes). The CLI syntax, routing rules, frontmatter schema, and when-to-invoke heuristics live in each skill's body, not the bootstrap, so they only load when Claude invokes the skill.
    - **Vault `README.md`** — prose orientation.
-   - **Auto-generated vault overview** — produced by the shared `_overview.sh` helper (cached at `$MEMORY_OVERVIEW_CACHE_DIR`, invalidated by vault `*.md` mtimes; cache key spans personal vault + project-vault path). Lists Tools, General, and the current project's notes from the personal vault. When the project has a registered+enabled project-vault, an additional `# Project vault: <project>` section follows, grouped by frontmatter `type:` (no enforced folder structure in project-vaults).
-   - **Project-scaffolding prompt** if `Projects/<name>/` doesn't exist (legacy pre-v1.6 personal-vault layout — only fires for vaults still on that structure).
+   - **Auto-generated vault overview** — produced by the shared `_overview.sh` helper (cached at `$MEMORY_OVERVIEW_CACHE_DIR`, invalidated by vault `*.md` mtimes; cache key spans personal vault + project-vault path). Lists Tools, Notes, Journals from the personal vault, grouped by frontmatter `type:`. When the cwd's project has a registered+enabled project-vault, an additional `# Project vault: <project>` section follows.
 6. Records the vault's `git rev-parse HEAD` to `/tmp/claude-memory-session/<session_id>.vault_head` so `SessionEnd` can diff-scope backlink reconciliation to "what changed in the vault during this session" — including mid-session commits that working-tree-only diff would miss. Best-effort; absent values fall back to working-tree-only diff at SessionEnd.
 
 Total injection is typically 3–8 KB depending on vault size.
@@ -79,7 +78,7 @@ The skill is the **eager** path for in-session writes — moments are captured a
 `hooks/scripts/session-end.sh` backgrounds a `claude -p` subprocess that:
 
 1. Reads the transcript.
-2. Writes a journal entry to `Projects/<project>/Journal/YYYY-MM-DD.md` (appends a `## Session HH:MM` section if the file already exists for today, and rewrites the frontmatter `description` to summarize the full day). Skipped if `Projects/<project>/` doesn't exist.
+2. Writes a journal entry to `Journals/YYYY-MM-DD.md` (appends a `## Session HH:MM` section if the file already exists for today, and rewrites the frontmatter `description` to summarize the full day).
 3. Writes new notes proactively when ALL of:
    - the information is significant (correction, validated approach, decision, novel fact),
    - it will be useful in future sessions,
@@ -102,13 +101,19 @@ The hook returns immediately; the review runs in the background and logs to `/tm
 
 ### Routing rules
 
-Three buckets:
+Type-driven, single decision tree. Mirrors the save-memory skill (see [Federated project-vaults](#federated-project-vaults) for full details).
 
-1. **Personal / cross-project** → vault (`General/Preferences/`, `General/References/`, `Tools/`, `General/People/`).
-2. **Project-related AND project has internal docs** (`docs/`, ADR folders, mkdocs/sphinx, CONTRIBUTING) → reflect upstream as an uncommitted doc edit in the repo. No vault note. The journal entry mentions the repo path; that's the cross-session anchor.
-3. **Project-related AND no project docs** → substantive vault note at `Projects/<name>/{Decisions,Learnings}/`.
+```
+type == journal     → Journals/<date>.md     (always, SessionEnd-only)
+type == tool        → Tools/<slug>.md        (always personal)
+type == preference  → Notes/<slug>.md        (project: tag if scoped)
+type ∈ {reference, decision, learning}:
+  cwd's project registered+enabled AND repo has matching folder
+                     → repo-vault <folder>/<slug>.md
+  otherwise          → Notes/<slug>.md       (project: tag if scoped)
+```
 
-Project-repo writes are restricted to the docs tree — never source, configs, CI, or manifests. WIP-guarded by `git status --porcelain` on the target; if dirty, the write is skipped and recorded under `## Integrity flags`.
+Folder-match for the repo-vault path: case-insensitive on basename, top-level + one level under `docs/`. `decision → decisions/|adr/|decision-records/`; `learning → learnings/|lessons/`; `reference → references/`. Project-vault writes leave the repo's working tree dirty for the user to commit; the personal vault auto-commits at SessionEnd.
 
 ## Token telemetry (`/obsidian-memory:usage`)
 
@@ -192,26 +197,4 @@ The `SessionEnd` review and the retrieval gate both spawn `claude -p`. The subpr
 
 ## Adding a new project
 
-`cd` into the project and start a session. `SessionStart` detects the missing `Projects/<basename>/` folder and instructs Claude to ask you once. Answer **yes** and Claude:
-
-1. Creates `Projects/<name>/{Decisions,Learnings,Research,References,Journal}` and renders `overview.md` from the template.
-2. Inspects the project dir — top-level docs (README, ARCHITECTURE, CONTRIBUTING), package manifests, /docs entry points — enough to populate `overview.md`'s curated sections. Goal: stable conceptual summary, not a doc index.
-3. Populates `overview.md` with the standard section headings (`## What it is`, `## Goals`, `## Current branch / focus`, `## Stakeholders`, `## Notes`), citing source files inline. Sections without grounded evidence are left empty. Keeps it short — a concise overview that stays accurate beats a comprehensive one that drifts.
-4. Leaves `Decisions/`, `Learnings/`, `Research/`, `References/`, `Journal/` **empty**. They fill organically:
-   - `Journal/` — `SessionEnd` writes one entry per day.
-   - `Decisions/`, `Learnings/`, `Research/`, `References/` — `save-memory` writes here when significant moments happen in-session.
-
-   Bulk-importing or mirroring repo docs is intentionally **not** part of scaffolding. Repo docs stay in the repo; Claude greps them when needed. Each vault note represents a curated memory moment, not a copy.
-
-Answer **no** for incidental cwds (`/tmp`, throwaway clones); General/Tools writes still work.
-
-To scaffold by hand (e.g., for non-interactive setup):
-
-```bash
-NAME="<your-project-basename>"
-cd "$HOME/Documents/Obsidian Vault/Projects"
-mkdir -p "$NAME"/{Journal,Decisions,Learnings,Research,References}
-sed "s/__PROJECT_NAME__/$NAME/g; s/__TODAY__/$(date +%Y-%m-%d)/g" \
-  "$CLAUDE_PLUGIN_ROOT/templates/Projects/PROJECT_NAME/overview.md" \
-  > "$NAME/overview.md"
-```
+There's nothing to scaffold per project — projects are tags, not folders. To bring a project's existing docs into Claude's awareness as a project-vault, run `/obsidian-memory:project enable` from inside the repo (or just answer `yes` to the registration prompt SessionStart shows the first time).

@@ -6,7 +6,7 @@ description: Capture an in-session memory note to the Obsidian vault. Invoke whe
 
 You've judged the latest moment as save-worthy. Now: search first to avoid duplicates, decide where it goes, propose to the user, then write on confirmation.
 
-The personal vault is `$OBSIDIAN_VAULT_PATH` (or `~/Documents/Obsidian Vault` if unset). The plugin path is `${CLAUDE_PLUGIN_ROOT}`. The current project's project-vault status is in `~/.config/obsidian-memory/projects.json` — check via `_projects.py lookup` (below).
+The personal vault is `$OBSIDIAN_VAULT_PATH` (or `~/Documents/Obsidian Memory` if unset). The plugin path is `${CLAUDE_PLUGIN_ROOT}`. The current project's project-vault status is in `~/.config/obsidian-memory/projects.json` — check via `_projects.py lookup` (below).
 
 ## 1. Search first
 

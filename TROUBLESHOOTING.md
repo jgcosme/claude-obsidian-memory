@@ -45,12 +45,12 @@ Reports config, vault, prereqs, plugin scripts, search smoke-test, overview cach
 **Scanning the vault for leaked credentials**
 
 ```bash
-grep -rE "(xoxp-|xoxb-|sk-[A-Za-z0-9]|gho_|ghp_|github_pat_|AKIA|AIza|AIzaSy)" "$HOME/Documents/Obsidian Vault"
+grep -rE "(xoxp-|xoxb-|sk-[A-Za-z0-9]|gho_|ghp_|github_pat_|AKIA|AIza|AIzaSy)" "$HOME/Documents/Obsidian Memory"
 ```
 
 To also catch credentials still in git history:
 
 ```bash
-git -C "$HOME/Documents/Obsidian Vault" log --all -p | \
+git -C "$HOME/Documents/Obsidian Memory" log --all -p | \
   grep -E "(xoxp-|xoxb-|sk-[A-Za-z0-9]|gho_|ghp_|github_pat_|AKIA|AIza|AIzaSy)" | head
 ```

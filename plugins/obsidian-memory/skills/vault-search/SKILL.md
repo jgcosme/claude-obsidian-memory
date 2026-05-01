@@ -6,7 +6,7 @@ description: Search the Obsidian vault for notes by keyword, type, or path-prefi
 
 You've judged the latest moment as a vault-lookup. The gate hook may have already injected matches via the auto-overview (description-anchored). Your job is the body-anchored fallback — when the gate missed something, or when you need a more targeted lookup.
 
-The vault path is `$OBSIDIAN_VAULT_PATH` (or `~/Documents/Obsidian Vault` if unset). The plugin path is `${CLAUDE_PLUGIN_ROOT}`.
+The vault path is `$OBSIDIAN_VAULT_PATH` (or `~/Documents/Obsidian Memory` if unset). The plugin path is `${CLAUDE_PLUGIN_ROOT}`.
 
 ## When to use which command
 
@@ -17,8 +17,8 @@ The vault has three lookup paths. Pick by the shape of the query:
 python3 "${CLAUDE_PLUGIN_ROOT}/scripts/_vault.py" search \
   --vault "$OBSIDIAN_VAULT_PATH" \
   --keywords "<2-4 keywords>" \
-  [--type <preference|reference|decision|learning|tool|people>] \
-  [--path-prefix Projects/<name>] \
+  [--type <preference|reference|decision|learning|tool|journal>] \
+  [--path-prefix <Tools|Notes|Journals>] \
   [--created-after YYYY-MM-DD] \
   [--project-vault $CLAUDE_PROJECT_DIR] \
   [--json]
@@ -39,8 +39,8 @@ obsidian search query="[type:decision] keywords"
 - **Direct lookup** (user named a thing — channel ID, dashboard URL, person, secret, config) → `_vault.py search --keywords "<the named thing>"`. Read the top hit.
 - **Troubleshooting** (user describes a symptom or error) → `_vault.py search --type learning --keywords "<symptom keywords>"`. Saved learnings often capture the gotcha.
 - **Tool setup** (user about to invoke an external tool) → `_vault.py search --type tool --keywords "<tool name>"` or `Read "Tools/<Tool>.md"` if you know the path.
-- **Project decision history** ("what did we decide about X?") → `_vault.py search --type decision --path-prefix "Projects/<name>" --keywords "<topic>"`.
-- **Unknown but project-scoped** → `_vault.py search --path-prefix "Projects/<name>" --keywords "<topic>"`.
+- **Project decision history** ("what did we decide about X?") → `_vault.py search --type decision --keywords "<topic>"` (filter by `project:` tag in results, or pass `--project-vault $CLAUDE_PROJECT_DIR` to also search the project's repo docs).
+- **Unknown but project-scoped** → `_vault.py search --keywords "<topic>" --project-vault $CLAUDE_PROJECT_DIR` and filter by the `project:` tag and `corpus` field in results.
 
 ## Notes
 

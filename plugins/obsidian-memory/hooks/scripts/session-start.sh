@@ -31,7 +31,7 @@ if [ -f "$CONFIG_FILE" ]; then
   . "$CONFIG_FILE" 2>/dev/null || true
 fi
 
-OBSIDIAN_VAULT_PATH="${OBSIDIAN_VAULT_PATH:-$HOME/Documents/Obsidian Vault}"
+OBSIDIAN_VAULT_PATH="${OBSIDIAN_VAULT_PATH:-$HOME/Documents/Obsidian Memory}"
 PLUGIN_ROOT="${CLAUDE_PLUGIN_ROOT:-}"
 
 # Refresh the stable status-line symlink each session so plugin upgrades
@@ -61,10 +61,14 @@ if [ ! -d "$OBSIDIAN_VAULT_PATH" ]; then
 
 The plugin is installed but no vault exists yet at: $OBSIDIAN_VAULT_PATH
 
+The plugin owns this vault entirely — three top-level folders (Tools/,
+Journals/, Notes/) plus a README. Project scoping is via the project:
+frontmatter tag on individual notes, not folder hierarchy.
+
 Before doing anything else this session, ask the user ONCE:
   "Set up the obsidian-memory vault at $OBSIDIAN_VAULT_PATH? This creates the
-   vault directory, scaffolds Tools/General/Projects/, and writes a config to
-   ~/.config/obsidian-memory/. Fully reversible. (y/n)"
+   vault directory with Tools/, Journals/, Notes/ subfolders, and writes a
+   config to ~/.config/obsidian-memory/. Fully reversible. (y/n)"
 
 If YES:
   1. bash "\${CLAUDE_PLUGIN_ROOT}/scripts/setup.sh"
@@ -105,8 +109,6 @@ fi
 PROJECT_DIR="${CLAUDE_PROJECT_DIR:-$PWD}"
 PROJECT_NAME=$(basename "$PROJECT_DIR")
 TODAY=$(date +%Y-%m-%d)
-PROJECT_VAULT_DIR="$OBSIDIAN_VAULT_PATH/Projects/$PROJECT_NAME"
-TEMPLATE_DIR="$PLUGIN_ROOT/templates/Projects/PROJECT_NAME"
 
 # Record vault HEAD SHA so SessionEnd can diff-scope backlink reconciliation
 # to "what changed during this session" — including mid-session commits,
@@ -250,36 +252,6 @@ if [ -n "$PLUGIN_ROOT" ] && [ -x "$OVERVIEW_HELPER" ]; then
   fi
 fi
 
-# 7. Project scaffolding prompt (only when the project has no vault folder yet).
-if [ ! -d "$PROJECT_VAULT_DIR" ]; then
-  cat <<EOF
-=== PROJECT: $PROJECT_NAME (not yet scaffolded) ===
-
-cwd: $PROJECT_DIR. No Projects/$PROJECT_NAME/ folder in the vault yet.
-
-Ask once: "Create memory scaffolding for project '$PROJECT_NAME'? (y/n)"
-  NO  → no project folder, no project-scoped notes this session. General/ and Tools/ writes are fine.
-  YES → scaffold + populate overview.md from evidence in $PROJECT_DIR.
-
-1. Folders + base overview:
-     mkdir -p "$PROJECT_VAULT_DIR"/{Decisions,Learnings,Research,References,Journal}
-     sed -e 's|__PROJECT_NAME__|$PROJECT_NAME|g' -e 's|__TODAY__|$TODAY|g' \\
-       "$TEMPLATE_DIR/overview.md" > "$PROJECT_VAULT_DIR/overview.md"
-
-2. Inspect $PROJECT_DIR to populate overview.md only. Read top-level docs (README, ARCHITECTURE, CONTRIBUTING), package manifests, /docs entry points — enough to fill the overview's curated sections. Skip source, vendored deps, generated files. The goal is a stable conceptual summary, not a doc index.
-   Repo metadata: \`git -C "$PROJECT_DIR" remote get-url origin\`, \`git -C "$PROJECT_DIR" branch --show-current\`.
-
-3. Populate overview.md. Keep section headings (## What it is, ## Goals, ## Current branch / focus, ## Stakeholders, ## Notes). Cite sources inline. Leave sections empty when no evidence — do not invent. Keep it short; a concise overview that stays accurate beats a comprehensive one that drifts.
-
-4. Leave Decisions/, Learnings/, Research/, References/, Journal/ empty. They fill organically:
-   - Journal/ — SessionEnd writes one entry per day.
-   - Decisions/, Learnings/, Research/, References/ — save-memory writes here when significant moments happen in-session.
-
-   Do NOT bulk-import or mirror repo docs into these folders. Repo docs stay in the repo; Claude greps them when needed. Each vault note represents a curated memory moment, not a copy.
-
-5. Summarize what was created (folders + overview only), then address the original user request.
-EOF
-fi
 } | { if [ -n "$USAGE_TMP" ]; then tee "$USAGE_TMP"; else cat; fi; }
 
 # Record the total injected-context size for /obsidian-memory:usage.

@@ -1,62 +1,45 @@
 ---
-type: readme
-description: Vault README — how Claude's persistent memory is organized
+type: reference
+description: "Obsidian Memory vault README — how Claude's persistent memory is organized"
 created: __TODAY__
 ---
 
-# Obsidian Memory Vault
+# Obsidian Memory
 
-This vault is Claude's persistent memory. The plugin reads it at SessionStart and writes to it at SessionEnd.
+This vault is Claude's persistent memory, owned entirely by the obsidian-memory plugin. The plugin reads it at SessionStart, writes to it from the save-memory skill and the SessionEnd review, and never reaches outside this directory.
 
 ## Layout
 
-- **`Tools/`** — CLIs, APIs, and tools Claude can use. Each note is one tool.
-- **`General/`** — cross-project knowledge.
-  - `Preferences/` — coding/communication style, validated approaches.
-  - `People/` — colleagues, contacts.
-  - `Admin/` — recurring tasks, accounts, processes.
-  - `References/` — cross-cutting external systems.
-  - `user.md` — your profile (identity, role, current focus).
-- **`Projects/<name>/`** — per-project memory (one folder per cwd basename).
-  - `overview.md` — what the project is, goals, status.
-  - `Decisions/` — choices with rationale (ADRs, design decisions).
-  - `Learnings/` — gotchas, runbooks, "how X actually works".
-  - `Research/` — investigations, options compared, RFCs.
-  - `References/` — project-specific external pointers.
-  - `Journal/YYYY-MM-DD.md` — written by SessionEnd.
+- **`Tools/`** — CLIs, APIs, services. One note per tool. Browsed by name.
+- **`Journals/`** — one note per session, written by SessionEnd.
+- **`Notes/`** — everything else: preferences, references, decisions, learnings. Searched by frontmatter.
 
-## Frontmatter convention
+Project scoping is via the `project:` frontmatter field on individual notes — there's no `Projects/<name>/` wrapper. A `Notes/auth-decision.md` with `project: my-app` belongs to that project; the same note without `project:` is cross-project.
+
+## Frontmatter
 
 Every note (except README files) has YAML frontmatter:
 
 ```yaml
 ---
-type: tool | user | preference | reference | decision | learning | research | overview | journal | people | admin
-description: one-line hook (what's in this note)
+type: preference | reference | decision | learning | tool | journal
+description: "one-line hook"
 created: YYYY-MM-DD
-project: <project-name>            # only for project-scoped notes
+project: <project-name>            # only when project-scoped
 ---
 ```
 
-The plugin builds Claude's vault overview at SessionStart by walking these
-frontmatter blocks. Adding/renaming notes shows up automatically in the next
-session.
+Six types. The plugin builds Claude's auto-overview by walking these frontmatter blocks each session.
 
-## Recall
+## Federated project-vaults
 
-The retrieval gate runs on every user message and decides what (if any) vault
-notes are relevant — by reading the auto-generated overview and, when needed,
-running typed searches. You can also query the vault directly:
+Project repos can be registered as a "project-vault" — a second corpus searched alongside this one. Per-project opt-in via SessionStart's registration prompt or `/obsidian-memory:project enable`. Registry lives at `~/.config/obsidian-memory/projects.json`.
+
+## Querying directly
 
 ```bash
-# Yesterday's learnings across all projects
 python3 "$CLAUDE_PLUGIN_ROOT/scripts/_vault.py" search \
   --type learning --created-after "$(date -v-1d +%Y-%m-%d)"
-
-# All decisions for a specific project
-python3 "$CLAUDE_PLUGIN_ROOT/scripts/_vault.py" search \
-  --type decision --path-prefix "Projects/foo"
 ```
 
-If Obsidian.app is running and the CLI is registered, `obsidian search` is
-also available with bracket-syntax queries (`[type:decision]`, `path:Projects/foo`).
+If Obsidian.app is running and its CLI is registered, `obsidian search` also works with bracket-syntax queries (`[type:decision]`).
