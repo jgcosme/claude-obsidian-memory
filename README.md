@@ -87,7 +87,7 @@ Setup also wires the plugin's token-usage readout into Claude Code's status line
 obsidian-memory • my-project 384.0k tok · 23.4%
 ```
 
-The `• <project>` appears whenever the current repo is registered as a project-vault (see [Federated project-vaults](#federated-project-vaults) below). The status line is set during `setup.sh` only if you don't already have one configured (existing customizations are left alone).
+The `• <project>` appears whenever the current repo is registered as a project-vault (see [Federated project-vaults](#federated-project-vaults) below). The status line is set during `setup.sh` only if you don't already have one configured (existing customizations are left alone). To turn the plugin's status line off without touching Claude Code settings, set `OBSIDIAN_MEMORY_STATUSLINE_ENABLED=false` in `~/.config/obsidian-memory/config.env` — `statusline.py` will exit silently and the segment renders empty.
 
 ## Vault structure
 
@@ -175,6 +175,7 @@ Edit `~/.config/obsidian-memory/config.env`:
 | `OBSIDIAN_MEMORY_SLIM_TRANSCRIPT` | `true` | strip tool_use / tool_result blocks from the transcript before the SessionEnd reviewer reads it (~95% size reduction on real sessions; signal preserved) |
 | `OBSIDIAN_MEMORY_GATE_PATH_CAP` | `3` | max paths the gate injects per turn |
 | `OBSIDIAN_MEMORY_GATE_NOTE_BYTE_CAP` | `10240` | per-note size cap on gate injection |
+| `OBSIDIAN_MEMORY_STATUSLINE_ENABLED` | `true` | show the plugin's token-usage status line; set false to hide it (statusline.py exits silently and `setup.sh` skips patching `~/.claude/settings.json`) |
 | `OBSIDIAN_MEMORY_DEBUG` | `false` | verbose logging |
 | `MEMORY_REVIEW_LOG` | `/tmp/claude-memory-review.log` | `SessionEnd` review log |
 | `MEMORY_GATE_LOG` | `/tmp/claude-memory-gate.log` | retrieval gate log |

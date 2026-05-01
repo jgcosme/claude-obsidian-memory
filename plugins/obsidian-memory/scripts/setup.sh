@@ -175,12 +175,17 @@ echo ""
 # ---------------------------------------------------------------------------
 STABLE_STATUSLINE="${CONFIG_DIR}/statusline.py"
 PLUGIN_STATUSLINE="$PLUGIN_ROOT/scripts/statusline.py"
+STATUSLINE_ENABLED="${OBSIDIAN_MEMORY_STATUSLINE_ENABLED:-true}"
 if [ -f "$PLUGIN_STATUSLINE" ]; then
+  # Always maintain the stable symlink so toggling the flag later doesn't
+  # require re-running setup. The flag only gates the settings.json patch.
   ln -sfn "$PLUGIN_STATUSLINE" "$STABLE_STATUSLINE"
   echo "[+] linked $STABLE_STATUSLINE → $PLUGIN_STATUSLINE"
 
-  CLAUDE_SETTINGS="${HOME}/.claude/settings.json"
-  if command -v jq >/dev/null 2>&1; then
+  if [ "$STATUSLINE_ENABLED" != "true" ]; then
+    echo "[=] status line disabled via OBSIDIAN_MEMORY_STATUSLINE_ENABLED — skipping settings patch"
+  elif command -v jq >/dev/null 2>&1; then
+    CLAUDE_SETTINGS="${HOME}/.claude/settings.json"
     if [ ! -f "$CLAUDE_SETTINGS" ]; then
       mkdir -p "$(dirname "$CLAUDE_SETTINGS")"
       echo '{}' > "$CLAUDE_SETTINGS"

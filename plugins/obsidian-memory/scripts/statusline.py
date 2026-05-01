@@ -16,6 +16,42 @@ from pathlib import Path
 USAGE_DIR = os.environ.get("MEMORY_USAGE_DIR", "/tmp/claude-memory-usage")
 CHARS_KINDS = ("session_start", "gate_inject")
 
+CONFIG_FILE = Path(
+    os.environ.get(
+        "OBSIDIAN_MEMORY_CONFIG_FILE",
+        str(Path.home() / ".config/obsidian-memory/config.env"),
+    )
+)
+
+
+def _config_flag(name: str, default: bool) -> bool:
+    """Read a boolean flag from config.env. Honors env override first.
+    Parses minimal `KEY=value` / `export KEY="value"` lines — sufficient for
+    the plugin's flag set; not a full bash interpreter."""
+    env_val = os.environ.get(name)
+    if env_val is not None:
+        return env_val.strip().lower() in ("true", "1", "yes", "on")
+    if not CONFIG_FILE.is_file():
+        return default
+    try:
+        with open(CONFIG_FILE, encoding="utf-8") as f:
+            for raw in f:
+                line = raw.strip()
+                if not line or line.startswith("#"):
+                    continue
+                if line.startswith("export "):
+                    line = line[len("export "):].lstrip()
+                key, sep, val = line.partition("=")
+                if not sep or key.strip() != name:
+                    continue
+                val = val.strip()
+                if val and val[0] in ("'", '"') and val[-1:] == val[0]:
+                    val = val[1:-1]
+                return val.lower() in ("true", "1", "yes", "on")
+    except OSError:
+        pass
+    return default
+
 
 def _project_tag(cwd: str) -> str:
     """Return the registered project name for cwd's project, or '' if not
@@ -85,6 +121,9 @@ def render(text: str = "", project: str = "") -> None:
 
 
 def main() -> None:
+    if not _config_flag("OBSIDIAN_MEMORY_STATUSLINE_ENABLED", True):
+        return
+
     try:
         payload = json.load(sys.stdin)
     except Exception:
