@@ -24,6 +24,7 @@ CLI:
   _repos.py lookup <path> --json     # full entry as JSON, or {"status": "not_registered"}
   _repos.py register <path> --enabled  --project <name>
   _repos.py register <path> --no-enabled --project <name>
+  _repos.py remove <path>            # delete entry; SessionStart will re-prompt
   _repos.py list [--json]
   _repos.py path                     # print resolved repos.json path
 
@@ -107,6 +108,19 @@ def register(path: str, *, enabled: bool, project: str) -> dict:
     }
 
 
+def remove(path: str) -> bool:
+    """Delete the entry for path. Returns True if an entry existed and was
+    removed, False if no entry was present (no-op)."""
+    repo_path = _resolve_repo(path)
+    rp = repos_path()
+    data = _load(rp)
+    if repo_path not in data["repos"]:
+        return False
+    del data["repos"][repo_path]
+    _save(rp, data)
+    return True
+
+
 def list_all() -> list[dict]:
     data = _load(repos_path())
     out: list[dict] = []
@@ -140,6 +154,18 @@ def _cmd_register(args: argparse.Namespace) -> int:
     else:
         print(f"{result['status']}: {result['path']}")
     return 0
+
+
+def _cmd_remove(args: argparse.Namespace) -> int:
+    removed = remove(args.path)
+    if args.json:
+        print(json.dumps({"removed": removed, "path": _resolve_repo(args.path)}))
+    else:
+        if removed:
+            print(f"removed: {_resolve_repo(args.path)}")
+        else:
+            print(f"no entry for: {_resolve_repo(args.path)}")
+    return 0 if removed else 1
 
 
 def _cmd_list(args: argparse.Namespace) -> int:
@@ -182,6 +208,11 @@ def main(argv: list[str] | None = None) -> int:
     rp.add_argument("--project", required=True, help="project name (usually repo basename)")
     rp.add_argument("--json", action="store_true")
     rp.set_defaults(func=_cmd_register)
+
+    rmp = sub.add_parser("remove", help="delete a repo entry (registration prompt fires again next session)")
+    rmp.add_argument("path")
+    rmp.add_argument("--json", action="store_true")
+    rmp.set_defaults(func=_cmd_remove)
 
     sp = sub.add_parser("list", help="list all registered repos")
     sp.add_argument("--json", action="store_true")
