@@ -14,8 +14,9 @@ The vault has three lookup paths. Pick by the shape of the query:
 
 ```bash
 # Full-body keyword search (the body-anchored fallback the gate can't do)
-python3 "${CLAUDE_PLUGIN_ROOT}/scripts/_vault.py" search \
+python3 "${CLAUDE_PLUGIN_ROOT}/scripts/_vault.py" \
   --vault "$OBSIDIAN_VAULT_PATH" \
+  search \
   --keywords "<2-4 keywords>" \
   [--type <preference|reference|decision|learning|tool|journal>] \
   [--path-prefix <Tools|Notes|Journals>] \

@@ -13,8 +13,9 @@ The personal vault is `$OBSIDIAN_VAULT_PATH` (or `~/Documents/Obsidian Memory` i
 A near-duplicate is more useful than a new note. Run:
 
 ```bash
-python3 "${CLAUDE_PLUGIN_ROOT}/scripts/_vault.py" search \
+python3 "${CLAUDE_PLUGIN_ROOT}/scripts/_vault.py" \
   --vault "$OBSIDIAN_VAULT_PATH" \
+  search \
   --keywords "<2-4 keywords from the moment>" \
   --project-vault "$CLAUDE_PROJECT_DIR" \
   --json
