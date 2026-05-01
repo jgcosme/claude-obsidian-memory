@@ -72,6 +72,12 @@ def _is_boilerplate(rel_path: Path) -> bool:
     parts = rel_path.parts
     if parts and parts[0] in SKIP_DOTFILE_DIRS:
         return True
+    # Drop test fixtures wherever they live in the tree. Fixtures often carry
+    # plugin-shaped frontmatter to simulate a real vault for the gate-prompt
+    # eval tests, so the runtime corpus filter (which trusts frontmatter)
+    # can't distinguish them — they have to be excluded by path.
+    if "fixtures" in parts:
+        return True
     name_upper = rel_path.name.upper()
     for prefix in BOILERPLATE_PREFIXES:
         if name_upper.startswith(prefix):
