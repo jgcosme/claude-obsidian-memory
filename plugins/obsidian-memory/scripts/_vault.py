@@ -92,10 +92,15 @@ def parse_frontmatter(text: str) -> dict[str, str] | None:
 
 
 def read_note(path: Path) -> tuple[dict[str, str] | None, str]:
-    """Return (frontmatter dict or None, body without frontmatter)."""
+    """Return (frontmatter dict or None, body without frontmatter).
+
+    OSError covers project-vault paths returned by `git ls-files` that
+    are tracked but missing from the working tree (uncommitted deletions);
+    callers walking enumerated corpora must not crash on those.
+    """
     try:
         text = path.read_text(encoding="utf-8")
-    except UnicodeDecodeError:
+    except (UnicodeDecodeError, OSError):
         return None, ""
     fm = parse_frontmatter(text)
     body = FRONTMATTER_RE.sub("", text, count=1) if fm is not None else text
