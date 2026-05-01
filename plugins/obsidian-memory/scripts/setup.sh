@@ -203,6 +203,48 @@ if [ -f "$PLUGIN_STATUSLINE" ]; then
   fi
 fi
 
+# ---------------------------------------------------------------------------
+# 6. Register vault with Obsidian.app so `obsidian://open?path=...` resolves
+# and the vault appears in Obsidian's vault switcher. Idempotent: skips if
+# the path is already registered. Warns (does not fail) if Obsidian is
+# running, since concurrent writes to obsidian.json could be clobbered.
+# ---------------------------------------------------------------------------
+case "$(uname -s)" in
+  Darwin) OBSIDIAN_REGISTRY="$HOME/Library/Application Support/obsidian/obsidian.json" ;;
+  Linux)  OBSIDIAN_REGISTRY="$HOME/.config/obsidian/obsidian.json" ;;
+  *)      OBSIDIAN_REGISTRY="" ;;
+esac
+
+if [ -n "$OBSIDIAN_REGISTRY" ] && command -v jq >/dev/null 2>&1; then
+  if [ ! -f "$OBSIDIAN_REGISTRY" ]; then
+    mkdir -p "$(dirname "$OBSIDIAN_REGISTRY")"
+    echo '{"vaults":{}}' > "$OBSIDIAN_REGISTRY"
+  fi
+  ALREADY=$(jq --arg p "$VAULT_PATH" \
+    '[.vaults // {} | to_entries[] | select(.value.path == $p)] | length' \
+    "$OBSIDIAN_REGISTRY" 2>/dev/null || echo 0)
+  if [ "$ALREADY" = "0" ]; then
+    OBSIDIAN_RUNNING=0
+    if pgrep -x Obsidian >/dev/null 2>&1; then OBSIDIAN_RUNNING=1; fi
+    VAULT_ID=$(python3 -c 'import secrets; print(secrets.token_hex(8))')
+    TS_MS=$(python3 -c 'import time; print(int(time.time()*1000))')
+    cp "$OBSIDIAN_REGISTRY" "${OBSIDIAN_REGISTRY}.bak.$(date +%Y%m%d%H%M%S)"
+    if jq --arg id "$VAULT_ID" --arg p "$VAULT_PATH" --argjson ts "$TS_MS" \
+         '.vaults = ((.vaults // {}) + {($id): {path: $p, ts: $ts}})' \
+         "$OBSIDIAN_REGISTRY" > "${OBSIDIAN_REGISTRY}.tmp" \
+       && mv "${OBSIDIAN_REGISTRY}.tmp" "$OBSIDIAN_REGISTRY"; then
+      echo "[+] registered vault with Obsidian.app"
+      if [ "$OBSIDIAN_RUNNING" = "1" ]; then
+        echo "[warn] Obsidian.app is running — quit and relaunch for the new vault to appear in the switcher."
+      fi
+    else
+      echo "[warn] failed to write $OBSIDIAN_REGISTRY — register the vault manually via Obsidian's 'Open folder as vault'."
+    fi
+  else
+    echo "[=] vault already registered with Obsidian.app"
+  fi
+fi
+
 echo ""
 echo "Done. Next steps:"
 echo "  1. (Optional) Open the vault in Obsidian.app: open -a Obsidian \"$VAULT_PATH\""
