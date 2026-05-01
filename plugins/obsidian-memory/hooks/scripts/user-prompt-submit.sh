@@ -155,8 +155,8 @@ Examples:
 "add a colors module" → {}
 "what would we decide if we needed kubernetes?" → {}
 "send a message to #eng" → {"read":["Tools/Slack.md"]}
-"add the api token to Tools/X.md" → {"read":["General/References/secrets-env.md"]}
-"remind me about the secrets pattern" → {"read":["General/References/secrets-env.md"]}
+"add the api token to Tools/X.md" → {"read":["Notes/secrets-env.md"]}
+"remind me about the secrets pattern" → {"read":["Notes/secrets-env.md"]}
 "what learnings this week?" → {"search":[{"type":"learning","created_after":"2026-04-22"}]}
 
 === VAULT OVERVIEW ===

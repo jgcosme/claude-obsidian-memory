@@ -40,7 +40,7 @@ Total injection is typically 3–8 KB depending on vault size.
 6. Surviving paths get their bodies emitted as additional context (truncated per-note at `OBSIDIAN_MEMORY_GATE_NOTE_BYTE_CAP`, default 10 KB). The hook emits the official Claude Code hooks-spec JSON on stdout — `{systemMessage, hookSpecificOutput: {hookEventName: "UserPromptSubmit", additionalContext}}` — where `systemMessage` is shown to the user and `additionalContext` is injected into Claude's context:
 
    ```text
-   [obsidian-memory] vault → Tools/Slack.md, General/References/secrets-env.md
+   [obsidian-memory] vault → Tools/Slack.md, Notes/secrets-env.md
    ```
 
 7. The hook records two telemetry events per turn (when applicable): a `gate_call` event with the API's exact `.usage` block, and — if any notes were injected — a `gate_inject` event with the byte size of the injection. Both are appended to `/tmp/claude-memory-usage/<session_id>.jsonl` via `hooks/scripts/_usage_log.sh`.

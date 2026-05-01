@@ -199,16 +199,23 @@ def _bullet(rel: str, fm: dict[str, str]) -> str:
     return f"{base} — {desc}" if desc else base
 
 
+_TYPE_ORDER = ("preference", "reference", "decision", "learning", "tool", "journal")
+_RECENT_JOURNAL_LIMIT = 5
+
+
 def overview(vault: Path, project: str | None = None, mode: str = "full") -> str:
-    """Build a markdown overview of the vault, scoped to current project's
-    notes for the Projects/ section to keep payload small.
+    """Build a markdown overview of the vault.
+
+    The vault is flat — `Tools/`, `Notes/`, `Journals/` — and project scoping
+    lives in each note's `project:` frontmatter field, not the folder
+    hierarchy. Notes with no `project:` are pan-vault "general" notes.
 
     Excludes README.md files (treated as navigation/prose, surfaced separately
     by the SessionStart hook).
 
     Modes:
-      full              Tools + General + current project (deep) + others (names)
-      tools-and-general Tools + General; Projects = names only (gate uses search)
+      full              Tools + Notes (current-project deep + general + other-project name list) + recent Journals
+      tools-and-general Tools + general Notes only; current/other project notes via search
       tools-only        Tools only; gate uses search for everything else
     """
     if mode not in {"full", "tools-and-general", "tools-only"}:
@@ -219,123 +226,109 @@ def overview(vault: Path, project: str | None = None, mode: str = "full") -> str
         fm, _ = read_note(f)
         notes.append((f, fm or {}))
 
-    def section(title: str, prefix: str) -> list[str]:
-        lines: list[str] = []
-        items: list[tuple[Path, dict[str, str]]] = []
-        for f, fm in notes:
-            rel = str(f.relative_to(vault))
-            if rel.startswith(prefix):
-                items.append((f, fm))
-        if not items:
-            return [f"## {title}", "_(empty)_", ""]
-        lines.append(f"## {title}")
-        for f, fm in items:
-            lines.append(_bullet(str(f.relative_to(vault)), fm))
-        lines.append("")
-        return lines
+    def by_prefix(prefix: str) -> list[tuple[Path, dict[str, str]]]:
+        return [(f, fm) for f, fm in notes if str(f.relative_to(vault)).startswith(prefix)]
 
     out: list[str] = ["# Vault overview", ""]
 
     # Tools — flat list (always included)
-    out += section("Tools", "Tools/")
-
-    if mode == "tools-only":
-        out.append("_All non-Tools vault content is searchable via the `search` field "
-                   "(filter by `type`, `path_prefix`, `keywords`, dates)._")
-        out.append("")
-        return "\n".join(out)
-
-    # General — broken into subsections by folder
-    general_subs = ["", "Preferences/", "People/", "Admin/", "References/"]
-    out.append("## General")
-    has_general = False
-    for sub in general_subs:
-        prefix = f"General/{sub}"
-        items = [(f, fm) for f, fm in notes if str(f.relative_to(vault)).startswith(prefix) and "/" not in str(f.relative_to(vault))[len(prefix):]]
-        # The condition above is finicky; do it more directly:
-        items = []
-        for f, fm in notes:
-            rel = str(f.relative_to(vault))
-            if not rel.startswith("General/"):
-                continue
-            sub_path = rel[len("General/"):]
-            if sub == "":
-                # top-level General/ files only
-                if "/" in sub_path:
-                    continue
-            else:
-                if not sub_path.startswith(sub):
-                    continue
-            items.append((f, fm))
-        if not items:
-            continue
-        has_general = True
-        label = "Top-level" if sub == "" else sub.rstrip("/")
-        out.append(f"### {label}")
-        for f, fm in items:
+    out.append("## Tools")
+    tools = by_prefix("Tools/")
+    if tools:
+        for f, fm in tools:
             out.append(_bullet(str(f.relative_to(vault)), fm))
-    if not has_general:
+    else:
         out.append("_(empty)_")
     out.append("")
 
-    # Projects
-    out.append("## Projects")
-    project_dirs: list[str] = []
-    if (vault / "Projects").is_dir():
-        project_dirs = sorted(
-            d.name for d in (vault / "Projects").iterdir()
-            if d.is_dir() and d.name not in SKIP_DIRS
-        )
-
-    if mode == "tools-and-general":
-        # Names only; gate uses `search` for project content.
-        if project_dirs:
-            out.append("(use `search` with `path_prefix: Projects/<name>` "
-                       "and/or `type` to query project notes)")
-            for p in project_dirs:
-                marker = "  ← current" if p == project else ""
-                out.append(f"- {p}{marker}")
-        else:
-            out.append("_(no projects yet)_")
+    if mode == "tools-only":
+        out.append("_All non-Tools vault content is searchable via the `search` field "
+                   "(filter by `type`, `keywords`, dates)._")
         out.append("")
         return "\n".join(out)
 
-    # mode == "full" — current project deep, others by name
+    # Notes — partition by project: frontmatter
+    notes_files = by_prefix("Notes/")
+    current_notes: list[tuple[Path, dict[str, str]]] = []
+    general_notes: list[tuple[Path, dict[str, str]]] = []
+    other_notes_by_project: dict[str, list[tuple[Path, dict[str, str]]]] = {}
+    for f, fm in notes_files:
+        proj = fm.get("project", "").strip()
+        if not proj:
+            general_notes.append((f, fm))
+        elif proj == project:
+            current_notes.append((f, fm))
+        else:
+            other_notes_by_project.setdefault(proj, []).append((f, fm))
+
+    def emit_by_type(items: list[tuple[Path, dict[str, str]]]) -> None:
+        by_type: dict[str, list[tuple[Path, dict[str, str]]]] = {}
+        for f, fm in items:
+            by_type.setdefault(fm.get("type", "untyped"), []).append((f, fm))
+        ordered_types = [t for t in _TYPE_ORDER if t in by_type]
+        ordered_types += sorted(t for t in by_type if t not in _TYPE_ORDER)
+        for type_ in ordered_types:
+            out.append(f"#### {type_}")
+            for f, fm in by_type[type_]:
+                out.append(_bullet(str(f.relative_to(vault)), fm))
+
+    if mode == "tools-and-general":
+        out.append("## Notes (general)")
+        if general_notes:
+            emit_by_type(general_notes)
+        else:
+            out.append("_(empty)_")
+        out.append("")
+        if current_notes or other_notes_by_project:
+            out.append("_Project-scoped notes available via `search` "
+                       "(filter by `keywords` matching the project name, plus `type`)._")
+            out.append("")
+        return "\n".join(out)
+
+    # mode == "full"
+    out.append("## Notes")
+
     if project:
         out.append(f"### Current project: {project}")
-        scope_prefix = f"Projects/{project}/"
-        scoped = [(f, fm) for f, fm in notes if str(f.relative_to(vault)).startswith(scope_prefix)]
-        if not scoped:
-            out.append("_(no notes — not yet scaffolded)_")
+        if current_notes:
+            emit_by_type(current_notes)
         else:
-            # Group by subfolder
-            buckets: dict[str, list[tuple[Path, dict[str, str]]]] = {}
-            for f, fm in scoped:
-                rel = str(f.relative_to(vault))
-                tail = rel[len(scope_prefix):]
-                if "/" not in tail:
-                    bucket = "_top"
-                else:
-                    bucket = tail.split("/", 1)[0]
-                buckets.setdefault(bucket, []).append((f, fm))
-            for label in ["_top", "Decisions", "Learnings", "Research", "References", "Journal"]:
-                items = buckets.get(label)
-                if not items:
-                    continue
-                heading = "Overview" if label == "_top" else label
-                out.append(f"#### {heading}")
-                for f, fm in items:
-                    out.append(_bullet(str(f.relative_to(vault)), fm))
+            out.append("_(no notes yet for this project)_")
         out.append("")
-    others = [p for p in project_dirs if p != project]
-    if others:
+
+    out.append("### General (cross-project)")
+    if general_notes:
+        emit_by_type(general_notes)
+    else:
+        out.append("_(empty)_")
+    out.append("")
+
+    if other_notes_by_project:
         out.append("### Other projects")
-        out.append("(use `_vault.py search --path-prefix Projects/<name>` to query)")
-        for p in others:
-            out.append(f"- {p}")
+        out.append("(use `search` with `keywords: <project-name>` to query)")
+        for proj in sorted(other_notes_by_project.keys()):
+            count = len(other_notes_by_project[proj])
+            out.append(f"- {proj} ({count} note{'s' if count != 1 else ''})")
         out.append("")
-    if not project_dirs:
-        out.append("_(no projects yet)_")
+
+    # Journals — recent only, current project preferred when set
+    journals = by_prefix("Journals/")
+    if journals:
+        if project:
+            scoped = [(f, fm) for f, fm in journals if fm.get("project", "").strip() == project]
+            label = f"## Journals (recent — {project})"
+        else:
+            scoped = journals
+            label = "## Journals (recent)"
+        # Sort by `created:` desc, fall back to filename desc
+        def _key(item: tuple[Path, dict[str, str]]) -> str:
+            return item[1].get("created", "") or item[0].stem
+        scoped.sort(key=_key, reverse=True)
+        out.append(label)
+        for f, fm in scoped[:_RECENT_JOURNAL_LIMIT]:
+            out.append(_bullet(str(f.relative_to(vault)), fm))
+        if len(scoped) > _RECENT_JOURNAL_LIMIT:
+            out.append(f"_(+{len(scoped) - _RECENT_JOURNAL_LIMIT} older — search by `created:` date)_")
         out.append("")
 
     return "\n".join(out)
@@ -609,7 +602,7 @@ def main(argv: list[str] | None = None) -> int:
 
     sp = sub.add_parser("search", help="search the vault by frontmatter and keywords")
     sp.add_argument("--type", help="filter by frontmatter `type:` (e.g., decision)")
-    sp.add_argument("--path-prefix", help="filter by relative path prefix (e.g., Projects/foo)")
+    sp.add_argument("--path-prefix", help="filter by relative path prefix (e.g., Notes, Tools, Journals)")
     sp.add_argument("--keywords", help="space-separated keywords; matched against path, frontmatter, body")
     sp.add_argument("--created-after", help="ISO date YYYY-MM-DD; only notes with frontmatter `created:` >= this date")
     sp.add_argument("--created-before", help="ISO date YYYY-MM-DD; only notes with `created:` <= this date")
@@ -632,7 +625,7 @@ def main(argv: list[str] | None = None) -> int:
 
     ip = sub.add_parser("incoming-wikilinks",
                         help="find notes linking to TARGET via [[wikilink]] (path-qualified or unambiguous bare basename)")
-    ip.add_argument("--target", required=True, help="vault-relative path of the target note (e.g., Projects/foo/bar.md)")
+    ip.add_argument("--target", required=True, help="vault-relative path of the target note (e.g., Notes/bar.md)")
     ip.set_defaults(func=_cmd_incoming_wikilinks)
 
     args = ap.parse_args(argv)

@@ -11,7 +11,7 @@ project: claude-obsidian-memory
 A: The project name is captured at `SessionStart` (from `$CLAUDE_PROJECT_DIR` or `$PWD`). Mid-session `cd` doesn't change which project's overview is loaded. The journal at `SessionEnd` still writes to the original project's folder. Start a new session if you want to switch contexts.
 
 **Q: Can I share my vault with a teammate?**
-A: Yes — push to a private remote and have them clone it. The `SessionEnd` review will commit their changes too. Be careful with `General/user.md`, which is meant to be your personal profile; either gitignore it or accept that it's shared.
+A: Yes — push to a private remote and have them clone it. The `SessionEnd` review will commit their changes too. Be careful with `Notes/user.md`, which is meant to be your personal profile; either gitignore it or accept that it's shared.
 
 **Q: Does this work on Linux?**
 A: Yes, with the same prerequisites. macOS-specific bits: the `SessionStart` hook tries `open -a Obsidian` (no-op on Linux) and falls back to `obsidian` on `$PATH`. `flock` is preinstalled on Linux but not on macOS.

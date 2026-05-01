@@ -2,7 +2,7 @@
 """Full Obsidian vault integrity audit.
 
 Reports:
-- Frontmatter issues (missing required keys: type, description, created; project under Projects/)
+- Frontmatter issues (missing required keys: type, description, created)
 - Broken wikilinks (target file not found)
 - Orphan notes (no incoming wikilink, excluding README.md files)
 - Duplicate basenames (multiple notes share the same filename, making bare
@@ -107,8 +107,9 @@ def _audit_corpus(label: str, root: Path, files: list[Path], *, project_required
     """Run integrity checks against a single corpus.
 
     project_required: when True, every note must have `project:` (used for
-    project-vault corpora where save-memory always sets it). When False, only
-    notes under `Projects/` need it (the personal-vault legacy convention).
+    project-vault corpora where save-memory always sets it). When False
+    (personal vault), `project:` is optional — notes scoped to a project
+    carry the field, pan-vault notes don't.
     """
     basename_map: dict[str, list[Path]] = {}
     for f in files:
@@ -134,7 +135,7 @@ def _audit_corpus(label: str, root: Path, files: list[Path], *, project_required
             fm_issues.append({"file": str(rel), "issue": "no frontmatter block"})
         else:
             required = ["type", "description", "created"]
-            if project_required or str(rel).startswith("Projects/"):
+            if project_required:
                 required.append("project")
             for k in required:
                 if k not in fm:

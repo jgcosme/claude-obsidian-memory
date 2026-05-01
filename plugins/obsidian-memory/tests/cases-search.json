@@ -38,16 +38,13 @@
       "msg": "what learnings have I captured recently?"
     },
     {
-      "msg": "what's the overview of the current project?"
+      "msg": "what's the latest on the current project?"
     },
     {
       "msg": "thanks! also remind me about the slack token"
     },
     {
       "msg": "I forgot the rule about how we organize external doc imports"
-    },
-    {
-      "msg": "what's in the other-project-a project?"
     },
     {
       "msg": "the gate keeps failing with 'Not logged in' on subprocess calls"

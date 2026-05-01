@@ -25,8 +25,9 @@ Reports config, vault, prereqs, plugin scripts, search smoke-test, overview cach
 - Install whatever the script flagged (`jq`, `python3 ≥ 3.9`). On macOS: `brew install jq`. `python3` is normally preinstalled but may be older than 3.9 on legacy systems.
 
 **`SessionEnd` review didn't run / didn't write a journal**
-- Check `/tmp/claude-memory-review.log`. If it says `no Projects/<name>/ folder; skipping review, will still commit dirty vault state`, you declined to scaffold (or were never asked) — start a new session in that directory and answer **yes** to the scaffolding prompt, or scaffold manually (see [HOW-IT-WORKS.md](./HOW-IT-WORKS.md#adding-a-new-project)). Any `General/`/`Tools/` writes from the session were still committed.
+- Check `/tmp/claude-memory-review.log`. If it says `OBSIDIAN_MEMORY_REVIEW_ENABLED=false`, the review is disabled in `~/.config/obsidian-memory/config.env` (auto-commit still runs).
 - If it says `no transcript at ''`, check that `jq` is installed.
+- If it says `vault not found at '...'`, run `setup.sh` to scaffold the vault.
 - If you don't see any log at all, the hook may not be registered — try `/reload-plugins` and restart your session.
 
 **Reviews are too aggressive / writing too many notes**
