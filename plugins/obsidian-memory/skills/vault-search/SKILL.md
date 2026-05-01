@@ -19,7 +19,7 @@ python3 "${CLAUDE_PLUGIN_ROOT}/scripts/_vault.py" \
   search \
   --keywords "<2-4 keywords>" \
   [--type <preference|reference|decision|learning|tool|journal>] \
-  [--path-prefix <Tools|Notes|Journals>] \
+  [--path-prefix <Tools|Notes|Journals|Journals/<project>>] \
   [--created-after YYYY-MM-DD] \
   [--project-vault $CLAUDE_PROJECT_DIR] \
   [--json]

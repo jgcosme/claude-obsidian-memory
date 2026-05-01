@@ -211,9 +211,11 @@ _RECENT_JOURNAL_LIMIT = 5
 def overview(vault: Path, project: str | None = None, mode: str = "full") -> str:
     """Build a markdown overview of the vault.
 
-    The vault is flat — `Tools/`, `Notes/`, `Journals/` — and project scoping
-    lives in each note's `project:` frontmatter field, not the folder
-    hierarchy. Notes with no `project:` are pan-vault "general" notes.
+    `Tools/` and `Notes/` are flat; `Journals/` is nested one level by
+    project (`Journals/<project>/<date>.md`) so multi-project days don't
+    collide on a single file. Project scoping for Notes lives in each
+    note's `project:` frontmatter field, not the folder hierarchy. Notes
+    with no `project:` are pan-vault "general" notes.
 
     Excludes README.md files (treated as navigation/prose, surfaced separately
     by the SessionStart hook).

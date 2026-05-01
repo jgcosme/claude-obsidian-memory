@@ -11,7 +11,7 @@ This vault is Claude's persistent memory, owned entirely by the obsidian-memory 
 ## Layout
 
 - **`Tools/`** — CLIs, APIs, services. One note per tool. Browsed by name.
-- **`Journals/`** — one note per session, written by SessionEnd.
+- **`Journals/<project>/<date>.md`** — one note per project per day, written by SessionEnd. Multiple sessions on the same project on the same day append `## Session HH:MM` sections to the same file. Different projects on the same day land in separate per-project files so the `project:` frontmatter stays single-valued.
 - **`Notes/`** — everything else: preferences, references, decisions, learnings. Searched by frontmatter.
 
 Project scoping is via the `project:` frontmatter field on individual notes — there's no `Projects/<name>/` wrapper. A `Notes/auth-decision.md` with `project: my-app` belongs to that project; the same note without `project:` is cross-project.

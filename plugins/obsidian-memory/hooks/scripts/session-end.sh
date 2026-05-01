@@ -189,7 +189,9 @@ Do steps 1-3 first. Step 4 (the journal) is written last so its bullets can refe
    Auto-fix unambiguous issues (description drift, backlink-rename). List ambiguous and non-fixable items in their dedicated sections.
 
 4. JOURNAL — always, written LAST.
-   Path: __VAULT__/Journals/__TODAY__.md
+   Path: __VAULT__/Journals/__PROJECT_NAME__/__TODAY__.md
+
+   Journals are scoped one-file-per-project-per-day: the directory `__PROJECT_NAME__/` segregates this project's day from any other project's day. Use the `Write` tool — it creates parent directories automatically.
 
    New file: frontmatter (type=journal, description=<one-line day summary>, project=__PROJECT_NAME__, created=__TODAY__) + "## Session __NOW__" + 3-6 bullets covering work, decisions, learnings.
 

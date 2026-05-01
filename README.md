@@ -96,7 +96,7 @@ The plugin owns its own Obsidian vault — by default at `~/Documents/Obsidian M
 Obsidian Memory/
 ├── README.md          — prose orientation (always loaded)
 ├── Tools/<tool>.md    — CLI/API references; browsed by tool name
-├── Journals/          — one entry per session, written by SessionEnd
+├── Journals/<project>/<date>.md — one entry per project per day (sessions append), written by SessionEnd
 └── Notes/             — everything else; searched by frontmatter
 ```
 

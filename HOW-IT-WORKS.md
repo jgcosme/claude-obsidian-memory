@@ -78,7 +78,7 @@ The skill is the **eager** path for in-session writes — moments are captured a
 `hooks/scripts/session-end.sh` backgrounds a `claude -p` subprocess that:
 
 1. Reads the transcript.
-2. Writes a journal entry to `Journals/YYYY-MM-DD.md` (appends a `## Session HH:MM` section if the file already exists for today, and rewrites the frontmatter `description` to summarize the full day).
+2. Writes a journal entry to `Journals/<project>/YYYY-MM-DD.md` (one file per project per day; appends a `## Session HH:MM` section if the file already exists for today's project, and rewrites the frontmatter `description` to summarize the full day). Cross-project days produce one file per project, each with a single-valued `project:` frontmatter.
 3. Writes new notes proactively when ALL of:
    - the information is significant (correction, validated approach, decision, novel fact),
    - it will be useful in future sessions,
@@ -104,7 +104,7 @@ The hook returns immediately; the review runs in the background and logs to `/tm
 Type-driven, single decision tree. Mirrors the save-memory skill (see [Federated project-vaults](#federated-project-vaults) for full details).
 
 ```
-type == journal     → Journals/<date>.md     (always, SessionEnd-only)
+type == journal     → Journals/<project>/<date>.md  (always, SessionEnd-only)
 type == tool        → Tools/<slug>.md        (always personal)
 type == preference  → Notes/<slug>.md        (project: tag if scoped)
 type ∈ {reference, decision, learning}:
@@ -170,7 +170,7 @@ A "project-vault" is a project repo whose own markdown files participate as a se
 **Write routing** (save-memory):
 
 ```
-type == journal     → personal Journals/   (always; SessionEnd-only)
+type == journal     → personal Journals/<project>/  (always; SessionEnd-only)
 type == tool        → personal Tools/      (always; cross-project by nature)
 type == preference  → personal Notes/      (always; project: tag if scoped)
 type ∈ {reference, decision, learning}:
