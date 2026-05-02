@@ -11,14 +11,15 @@ Run the audit script. Includes the current project's project-vault if registered
 ```bash
 PROJECT_DIR="${CLAUDE_PROJECT_DIR:-$PWD}"
 PROJECT_ROOT=$(git -C "$PROJECT_DIR" rev-parse --show-toplevel 2>/dev/null || true)
+PLUGIN_RUN="${CLAUDE_PLUGIN_ROOT:-$(ls -td ~/.claude/plugins/cache/jgcosme-plugins/obsidian-memory/*/ 2>/dev/null | head -1 | sed 's:/$::')}/bin/run"
 PROJECT_VAULT_ARG=""
 if [ -n "$PROJECT_ROOT" ]; then
-  STATUS=$(python3 "${CLAUDE_PLUGIN_ROOT}/scripts/_projects.py" lookup "$PROJECT_ROOT" 2>/dev/null || echo "")
+  STATUS=$("$PLUGIN_RUN" projects lookup "$PROJECT_ROOT" 2>/dev/null || echo "")
   if [ "$STATUS" = "enabled" ]; then
     PROJECT_VAULT_ARG="--project-vault $PROJECT_ROOT"
   fi
 fi
-python3 "${CLAUDE_PLUGIN_ROOT:-$(ls -td ~/.claude/plugins/cache/jgcosme-plugins/obsidian-memory/*/ 2>/dev/null | head -1 | sed 's:/$::')}/scripts/audit.py" $PROJECT_VAULT_ARG
+"$PLUGIN_RUN" audit $PROJECT_VAULT_ARG
 ```
 
 Group the script's output by category, highest-impact first (broken wikilinks > missing frontmatter > orphans > duplicate basenames). For each issue, propose the smallest fix. Auto-fixes aren't applied at this step — the user picks which to act on.
@@ -27,12 +28,13 @@ If the structural audit comes back clean, say so plainly and continue to Step 2.
 
 ## Step 2 — frontmatter backfill (LLM-judged, propose then apply)
 
-For files flagged in Step 1 with `no frontmatter block`, propose plugin frontmatter using `init_project_vault.py`'s heuristics. This is mostly relevant for the project-vault corpus (personal-vault writes go through save-memory and won't reach audit missing-frontmatter unless something went wrong).
+For files flagged in Step 1 with `no frontmatter block`, propose plugin frontmatter using the binary's `init-project` heuristics. This is mostly relevant for the project-vault corpus (personal-vault writes go through save-memory and won't reach audit missing-frontmatter unless something went wrong).
 
 When the missing-frontmatter list is non-empty AND scoped to the project-vault:
 
 ```bash
-python3 "${CLAUDE_PLUGIN_ROOT}/scripts/init_project_vault.py" "$PROJECT_ROOT" --project "$(python3 "${CLAUDE_PLUGIN_ROOT}/scripts/_projects.py" lookup "$PROJECT_ROOT" --json | jq -r '.project')" --dry-run
+PROJECT_NAME=$("$PLUGIN_RUN" projects lookup "$PROJECT_ROOT" --json | grep -o '"project":[[:space:]]*"[^"]*"' | sed -E 's/.*"([^"]+)"$/\1/')
+"$PLUGIN_RUN" init-project "$PROJECT_ROOT" --project "$PROJECT_NAME" --dry-run
 ```
 
 Show the proposed frontmatter for each file. Ask the user once: "Apply frontmatter to N files? (y/n)". On `y`, re-run the same command without `--dry-run`. On `n`, list the paths and skip.

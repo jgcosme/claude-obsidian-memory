@@ -6,20 +6,21 @@ description: Capture an in-session memory note to the Obsidian vault. Invoke whe
 
 You've judged the latest moment as save-worthy. Now: search first to avoid duplicates, decide where it goes, propose to the user, then write on confirmation.
 
-The personal vault is `$OBSIDIAN_VAULT_PATH` (or `~/Documents/Obsidian Memory` if unset). The plugin path is `${CLAUDE_PLUGIN_ROOT}`. The current project's project-vault status is in `~/.config/obsidian-memory/projects.json` — check via `_projects.py lookup` (below).
+The personal vault is `$OBSIDIAN_VAULT_PATH` (or `~/Documents/Obsidian Memory` if unset). The plugin binary lives at `${CLAUDE_PLUGIN_ROOT}/bin/run` (a thin wrapper that ensures the binary is installed, then execs it). The current project's project-vault status is in `~/.config/obsidian-memory/projects.json` — check via `obsidian-memory projects lookup` (below).
 
 ## 1. Search first
 
 A near-duplicate is more useful than a new note. Build the search command, adding `--project-vault` only when the current project is registered + enabled in `projects.json`:
 
 ```bash
+PLUGIN_RUN="${CLAUDE_PLUGIN_ROOT}/bin/run"
 PROJECT_ROOT=$(git -C "${CLAUDE_PROJECT_DIR:-$PWD}" rev-parse --show-toplevel 2>/dev/null || true)
 PROJECT_VAULT_ARG=""
 if [ -n "$PROJECT_ROOT" ]; then
-  STATUS=$(python3 "${CLAUDE_PLUGIN_ROOT}/scripts/_projects.py" lookup "$PROJECT_ROOT" 2>/dev/null || echo "")
+  STATUS=$("$PLUGIN_RUN" projects lookup "$PROJECT_ROOT" 2>/dev/null || echo "")
   [ "$STATUS" = "enabled" ] && PROJECT_VAULT_ARG="--project-vault $PROJECT_ROOT"
 fi
-python3 "${CLAUDE_PLUGIN_ROOT}/scripts/_vault.py" \
+"$PLUGIN_RUN" vault \
   --vault "$OBSIDIAN_VAULT_PATH" \
   search \
   --keywords "<2-4 keywords from the moment>" \
@@ -66,11 +67,11 @@ B. PRIMARY == preference
 
 C. PRIMARY in {reference, findings, decision, learning}:
    1. Look up cwd's project-vault status:
-        STATUS=$(python3 "${CLAUDE_PLUGIN_ROOT}/scripts/_projects.py" lookup "$CLAUDE_PROJECT_DIR")
+        STATUS=$("$PLUGIN_RUN" projects lookup "$CLAUDE_PROJECT_DIR")
 
    2. If STATUS == enabled, ask whether a matching repo folder exists:
-        FOLDER=$(python3 "${CLAUDE_PLUGIN_ROOT}/scripts/_project_docs.py" \
-                  match-type-folder "$CLAUDE_PROJECT_DIR" --type <PRIMARY>)
+        FOLDER=$("$PLUGIN_RUN" project-docs match-type-folder \
+                  "$CLAUDE_PROJECT_DIR" --type <PRIMARY>)
       If exit=0, FOLDER is the repo-relative path (e.g. `docs/decisions`).
 
    3. Decide:
@@ -80,7 +81,7 @@ C. PRIMARY in {reference, findings, decision, learning}:
             → $OBSIDIAN_VAULT_PATH/Notes/<slug>.md   (personal-vault note)
 
       Add `project:` tag whenever the memory is project-scoped, regardless of
-      where the note lands. The tag value comes from `_projects.py lookup --json`
+      where the note lands. The tag value comes from `obsidian-memory projects lookup --json`
       when registered, else the repo basename, else omit.
 ```
 

@@ -8,3 +8,13 @@
 
 # Local-only test outputs
 *.log
+
+# Rust build artifacts
+/target
+Cargo.lock.bak
+
+# Downloaded binary — fetched at install time from GH Releases.
+# bin/run and bin/install.sh are tracked (the bootstrap shell scripts).
+/bin/obsidian-memory
+/bin/*.sha256
+/bin/*.tar.gz

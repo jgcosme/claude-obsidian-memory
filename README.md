@@ -31,14 +31,14 @@ For internals, see [HOW-IT-WORKS.md](./HOW-IT-WORKS.md).
 | Tool | Required | Why |
 |---|---|---|
 | Claude Code ≥ 2.0 | yes | runs the plugin |
-| `jq` | yes | parses hook payloads |
-| `python3` ≥ 3.9 | yes | search CLI + audit |
+| `curl` or `wget` | yes (first run only) | downloads the prebuilt binary from GH Releases |
+| `tar` | yes (first run only) | extracts the release tarball |
 | `git` | recommended | auto-commit (no-op if vault isn't a repo) |
 | Obsidian desktop app | optional | only needed for the in-vault `obsidian search` CLI |
 | `gh` | optional | pushing the vault to GitHub |
 | `flock` | optional | concurrent-session safety on auto-commit |
 
-Tested on macOS; Linux works with the same prerequisites.
+Supported platforms: macOS arm64/x86_64 and Linux arm64/x86_64. The plugin ships as a single static binary; no Python or jq runtime dependency.
 
 ## Install
 
@@ -48,15 +48,17 @@ Tested on macOS; Linux works with the same prerequisites.
 /reload-plugins
 ```
 
-The first time you start a Claude session after installing, `SessionStart` detects the missing vault and asks Claude to confirm setup with you (one consent prompt). Answer **yes** and Claude runs `setup.sh` for you, then offers to `git init` the vault so `SessionEnd` can auto-commit.
+On first hook fire, the bootstrap (`bin/run`) detects that the binary is missing and downloads the matching prebuilt `obsidian-memory` from GitHub Releases (sha256-verified). Subsequent invocations exec it directly. If the download fails (offline, GH outage), hooks exit cleanly so Claude Code is never blocked — the plugin re-tries on the next event.
+
+The first time you start a Claude session after installing, `SessionStart` detects the missing vault and asks Claude to confirm setup with you (one consent prompt). Answer **yes** and Claude runs `setup` for you, then offers to `git init` the vault so `SessionEnd` can auto-commit.
 
 To run setup manually instead — or to scaffold without starting a Claude session — invoke:
 
 ```bash
-bash "$CLAUDE_PLUGIN_ROOT/scripts/setup.sh"
+"$CLAUDE_PLUGIN_ROOT/bin/run" setup
 ```
 
-Idempotent. Verifies prerequisites and creates the vault, config, and a `chmod 600` `secrets.env`.
+Idempotent. Creates the vault, config, and a `chmod 600` `secrets.env`.
 
 Optional — push the vault to a private GitHub remote so it follows you across machines:
 

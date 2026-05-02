@@ -5,7 +5,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "${CLAUDE_PLUGIN_ROOT}/hooks/scripts/session-start.sh"
+            "command": "${CLAUDE_PLUGIN_ROOT}/bin/run hook session-start"
           }
         ]
       }
@@ -15,7 +15,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "${CLAUDE_PLUGIN_ROOT}/hooks/scripts/session-end.sh"
+            "command": "${CLAUDE_PLUGIN_ROOT}/bin/run hook session-end"
           }
         ]
       }
@@ -25,7 +25,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "${CLAUDE_PLUGIN_ROOT}/hooks/scripts/user-prompt-submit.sh"
+            "command": "${CLAUDE_PLUGIN_ROOT}/bin/run hook user-prompt-submit"
           }
         ]
       }

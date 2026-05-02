@@ -1,0 +1,19 @@
+#!/bin/bash
+# Lazy bootstrap wrapper. Ensures bin/obsidian-memory is installed (downloads
+# from GH Releases on first run) then execs it with whatever args followed.
+# Used by hooks.json and the slash-command markdown so plugin install is a
+# no-op until the first session, when the binary is fetched on demand.
+
+set -eu
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+PLUGIN_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+BIN="$PLUGIN_ROOT/bin/obsidian-memory"
+
+if [ ! -x "$BIN" ]; then
+  if ! bash "$SCRIPT_DIR/install.sh" >&2; then
+    echo "[obsidian-memory] binary install failed; skipping hook (Claude Code unaffected)" >&2
+    exit 0
+  fi
+fi
+
+exec "$BIN" "$@"

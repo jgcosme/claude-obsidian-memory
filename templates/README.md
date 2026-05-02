@@ -46,7 +46,7 @@ Project repos can be registered as a "project-vault" — a second corpus searche
 ## Querying directly
 
 ```bash
-python3 "$CLAUDE_PLUGIN_ROOT/scripts/_vault.py" search \
+"$CLAUDE_PLUGIN_ROOT/bin/run" vault search \
   --type learning --created-after "$(date -v-1d +%Y-%m-%d)"
 ```
 

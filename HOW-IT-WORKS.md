@@ -7,6 +7,8 @@ project: claude-obsidian-memory
 
 # How it works
 
+> **v2.0 note.** As of v2.0.0 (May 2026), all hooks and helpers ship as a single Rust binary at `$PLUGIN_ROOT/bin/obsidian-memory` (lazy-installed by `bin/run` on first session from GitHub Releases). The behavioral descriptions below are unchanged — overview format, gate prompt, review flow, file paths, telemetry — but the implementation references throughout this doc still use the v1 `_vault.py`/`_projects.py`/`session-start.sh`/etc. paths. The Rust modules at `src/vault/`, `src/hook/`, `src/projects.rs`, etc. mirror them 1:1 (e.g. `_vault.py search` → `obsidian-memory vault search`). See [CHANGELOG.md](./CHANGELOG.md) for the full mapping.
+
 The plugin runs three hooks across the Claude Code session lifecycle.
 
 ## `SessionStart`

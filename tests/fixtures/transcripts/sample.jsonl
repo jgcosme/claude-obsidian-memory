@@ -1,0 +1,8 @@
+{"type":"user","timestamp":"2026-04-29T12:24:51.697Z","message":{"content":"  hi there  "}}
+{"type":"assistant","timestamp":"2026-04-29T12:24:52Z","message":{"content":[{"type":"text","text":"Hello — what would you like?"}]}}
+{"type":"user","timestamp":"2026-04-29T12:24:55.001Z","message":{"content":[{"type":"tool_result","content":"some big tool output that should be DROPPED"},{"type":"text","text":"please find foo.md"}]}}
+{"type":"assistant","timestamp":"2026-04-29T12:25:01.500Z","message":{"content":[{"type":"thinking","text":"verbose internal monologue should be dropped"},{"type":"text","text":"Searching now."},{"type":"tool_use","name":"Grep","input":{"pattern":"foo"}},{"type":"tool_use","name":"Read","input":{"path":"foo.md"}}]}}
+{"type":"summary","summary":"this event type is ignored"}
+{"type":"assistant","timestamp":"2026-04-29T12:25:03Z","message":{"content":[{"type":"tool_use","name":"Bash","input":{"command":"ls"}}]}}
+not-json-garbage
+{"type":"assistant","timestamp":"2026-04-29T12:25:04Z","message":{"content":[]}}

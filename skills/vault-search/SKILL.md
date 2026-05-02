@@ -6,7 +6,7 @@ description: Search the Obsidian vault for notes by keyword, type, or path-prefi
 
 You've judged the latest moment as a vault-lookup. The gate hook may have already injected matches via the auto-overview (description-anchored). Your job is the body-anchored fallback — when the gate missed something, or when you need a more targeted lookup.
 
-The vault path is `$OBSIDIAN_VAULT_PATH` (or `~/Documents/Obsidian Memory` if unset). The plugin path is `${CLAUDE_PLUGIN_ROOT}`.
+The vault path is `$OBSIDIAN_VAULT_PATH` (or `~/Documents/Obsidian Memory` if unset). The plugin binary lives at `${CLAUDE_PLUGIN_ROOT}/bin/run` (a thin wrapper that ensures the binary is installed, then execs it).
 
 ## When to use which command
 
@@ -14,7 +14,7 @@ The vault has three lookup paths. Pick by the shape of the query:
 
 ```bash
 # Full-body keyword search (the body-anchored fallback the gate can't do)
-python3 "${CLAUDE_PLUGIN_ROOT}/scripts/_vault.py" \
+"${CLAUDE_PLUGIN_ROOT}/bin/run" vault \
   --vault "$OBSIDIAN_VAULT_PATH" \
   search \
   --keywords "<2-4 keywords>" \
@@ -37,18 +37,18 @@ obsidian search query="[type:decision] keywords"
 
 ## Decision shape
 
-- **Direct lookup** (user named a thing — channel ID, dashboard URL, person, secret, config) → `_vault.py search --keywords "<the named thing>"`. Read the top hit.
-- **Troubleshooting** (user describes a symptom or error) → `_vault.py search --type learning --keywords "<symptom keywords>"`. Saved learnings often capture the gotcha.
-- **Tool setup** (user about to invoke an external tool) → `_vault.py search --type tool --keywords "<tool name>"` or `Read "Tools/<Tool>.md"` if you know the path.
-- **Project decision history** ("what did we decide about X?") → `_vault.py search --type decision --keywords "<topic>"` (filter by `project:` tag in results, or pass `--project-vault $CLAUDE_PROJECT_DIR` to also search the project's repo docs).
-- **Prior research / synthesis** ("did we already look at X?", "what did we find when comparing Y options?") → `_vault.py search --type findings --keywords "<topic>"`. Save a re-investigation if a prior `findings` note covers the territory.
-- **Unknown but project-scoped** → `_vault.py search --keywords "<topic>" --project-vault $CLAUDE_PROJECT_DIR` and filter by the `project:` tag and `corpus` field in results.
+- **Direct lookup** (user named a thing — channel ID, dashboard URL, person, secret, config) → `obsidian-memory vault search --keywords "<the named thing>"`. Read the top hit.
+- **Troubleshooting** (user describes a symptom or error) → `obsidian-memory vault search --type learning --keywords "<symptom keywords>"`. Saved learnings often capture the gotcha.
+- **Tool setup** (user about to invoke an external tool) → `obsidian-memory vault search --type tool --keywords "<tool name>"` or `Read "Tools/<Tool>.md"` if you know the path.
+- **Project decision history** ("what did we decide about X?") → `obsidian-memory vault search --type decision --keywords "<topic>"` (filter by `project:` tag in results, or pass `--project-vault $CLAUDE_PROJECT_DIR` to also search the project's repo docs).
+- **Prior research / synthesis** ("did we already look at X?", "what did we find when comparing Y options?") → `obsidian-memory vault search --type findings --keywords "<topic>"`. Save a re-investigation if a prior `findings` note covers the territory.
+- **Unknown but project-scoped** → `obsidian-memory vault search --keywords "<topic>" --project-vault $CLAUDE_PROJECT_DIR` and filter by the `project:` tag and `corpus` field in results.
 
 `--type X` matches notes where `X` appears anywhere in the (possibly multi-) type list, so a `[findings, decision]` note shows up under both `--type findings` and `--type decision`.
 
 ## Notes
 
-- The auto-overview at session start indexes notes by description, not body. If a query keyword lives in a note body but not its description, only `_vault.py search` will find it (the gate can't).
+- The auto-overview at session start indexes notes by description, not body. If a query keyword lives in a note body but not its description, only `obsidian-memory vault search` will find it (the gate can't).
 - Verify before recommending: paths and function names drift between sessions. If you're about to advise the user based on a note, re-read it or re-search to confirm it's current.
 - One search per turn is usually enough. If the first miss, broaden keywords; don't chain unrelated searches.
 

@@ -4,7 +4,11 @@ description: Manage project-vault registrations. Verbs: enable | disable | remov
 
 Arguments: $ARGUMENTS
 
-Operate on `~/.config/obsidian-memory/projects.json` via the `_projects.py` helper. The helper path is `${CLAUDE_PLUGIN_ROOT}/scripts/_projects.py`. The init script (used on `enable` to backfill frontmatter) is `${CLAUDE_PLUGIN_ROOT}/scripts/init_project_vault.py`.
+Operate on `~/.config/obsidian-memory/projects.json` via the binary's `projects` and `init-project` subcommands. Resolve the binary path once:
+
+```bash
+PLUGIN_RUN="${CLAUDE_PLUGIN_ROOT:-$(ls -td ~/.claude/plugins/cache/jgcosme-plugins/obsidian-memory/*/ 2>/dev/null | head -1 | sed 's:/$::')}/bin/run"
+```
 
 ## Parsing
 
@@ -26,7 +30,7 @@ When `$ARGUMENTS` is empty:
 
 1. List the registry:
    ```bash
-   python3 "${CLAUDE_PLUGIN_ROOT}/scripts/_projects.py" list --json
+   "$PLUGIN_RUN" projects list --json
    ```
    Print as a numbered list including a `[N+1]` synthetic entry for "the current cwd" *if* it's a git repo and not already in the list. Format:
    ```
@@ -43,15 +47,15 @@ Skip the synthetic entry if cwd isn't a git repo or is already in the list.
 ## `enable [<path>]`
 
 1. Resolve project name:
-   - If an entry exists, reuse its `project` field via `_projects.py lookup <path> --json | jq -r '.project'`.
+   - If an entry exists, reuse its `project` field by parsing the JSON output of `"$PLUGIN_RUN" projects lookup <path> --json` (the `"project"` field).
    - Else use the repo basename: `basename "$PATH"`.
 2. Run register:
    ```bash
-   python3 "${CLAUDE_PLUGIN_ROOT}/scripts/_projects.py" register "<path>" --enabled --project "<name>"
+   "$PLUGIN_RUN" projects register "<path>" --enabled --project "<name>"
    ```
 3. Run init to backfill frontmatter on any existing markdown without it:
    ```bash
-   python3 "${CLAUDE_PLUGIN_ROOT}/scripts/init_project_vault.py" "<path>" --project "<name>"
+   "$PLUGIN_RUN" init-project "<path>" --project "<name>"
    ```
 4. Report what changed:
    - `Enabled '<name>' at <path>.`
@@ -62,11 +66,11 @@ Skip the synthetic entry if cwd isn't a git repo or is already in the list.
 
 1. Look up to get project name (or fall back to basename if not registered):
    ```bash
-   STATUS=$(python3 "${CLAUDE_PLUGIN_ROOT}/scripts/_projects.py" lookup "<path>" --json)
+   "$PLUGIN_RUN" projects lookup "<path>" --json
    ```
 2. Run register with `--no-enabled`:
    ```bash
-   python3 "${CLAUDE_PLUGIN_ROOT}/scripts/_projects.py" register "<path>" --no-enabled --project "<name>"
+   "$PLUGIN_RUN" projects register "<path>" --no-enabled --project "<name>"
    ```
 3. Report: `Disabled '<name>'. SessionStart will skip it silently. Use /obsidian-memory:project enable to re-enable.`
 
@@ -74,7 +78,7 @@ Skip the synthetic entry if cwd isn't a git repo or is already in the list.
 
 1. Run remove:
    ```bash
-   python3 "${CLAUDE_PLUGIN_ROOT}/scripts/_projects.py" remove "<path>"
+   "$PLUGIN_RUN" projects remove "<path>"
    ```
 2. Exit code:
    - 0: removed → `Removed '<path>'. Next SessionStart in this repo will offer the registration prompt again.`
@@ -85,7 +89,7 @@ Note: `remove` does NOT delete any frontmatter that init previously added to fil
 ## `list`
 
 ```bash
-python3 "${CLAUDE_PLUGIN_ROOT}/scripts/_projects.py" list
+"$PLUGIN_RUN" projects list
 ```
 
 Pass through. If empty, say `(no repos registered yet)` and tell the user that opening a Claude session in any project repo will offer to register it.
