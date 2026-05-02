@@ -174,50 +174,13 @@ echo ""
 # ---------------------------------------------------------------------------
 STABLE_STATUSLINE="${CONFIG_DIR}/statusline.py"
 PLUGIN_STATUSLINE="$PLUGIN_ROOT/scripts/statusline.py"
-STATUSLINE_ENABLED="${OBSIDIAN_MEMORY_STATUSLINE_ENABLED:-true}"
 if [ -f "$PLUGIN_STATUSLINE" ]; then
   # Always maintain the stable symlink so toggling the flag later doesn't
   # require re-running setup. The flag only gates the settings.json patch.
   ln -sfn "$PLUGIN_STATUSLINE" "$STABLE_STATUSLINE"
   echo "[+] linked $STABLE_STATUSLINE → $PLUGIN_STATUSLINE"
 
-  if [ "$STATUSLINE_ENABLED" != "true" ]; then
-    echo "[=] status line disabled via OBSIDIAN_MEMORY_STATUSLINE_ENABLED — skipping settings patch"
-  elif command -v jq >/dev/null 2>&1; then
-    CLAUDE_SETTINGS="${HOME}/.claude/settings.json"
-    if [ ! -f "$CLAUDE_SETTINGS" ]; then
-      mkdir -p "$(dirname "$CLAUDE_SETTINGS")"
-      echo '{}' > "$CLAUDE_SETTINGS"
-    fi
-    # Validate JSON before touching it. A malformed settings.json would have
-    # caused jq's read to silently produce empty output (treated as "no
-    # statusLine configured"), the patch attempt to fail at write time, and
-    # the user to see "[+] enabled status line" with no actual change.
-    if ! jq -e empty "$CLAUDE_SETTINGS" >/dev/null 2>&1; then
-      echo "[warn] $CLAUDE_SETTINGS is not valid JSON — skipping status line patch."
-      echo "       Fix the file (or delete it to start fresh) and re-run setup."
-    else
-      EXISTING=$(jq -r '.statusLine.command // empty' "$CLAUDE_SETTINGS" 2>/dev/null || echo "")
-      if [ -z "$EXISTING" ]; then
-        cp "$CLAUDE_SETTINGS" "${CLAUDE_SETTINGS}.bak.$(date +%Y%m%d%H%M%S)"
-        if jq --arg cmd "python3 \"$STABLE_STATUSLINE\"" \
-             '.statusLine = {type: "command", command: $cmd}' \
-             "$CLAUDE_SETTINGS" > "${CLAUDE_SETTINGS}.tmp" \
-           && mv "${CLAUDE_SETTINGS}.tmp" "$CLAUDE_SETTINGS"; then
-          echo "[+] enabled status line in $CLAUDE_SETTINGS"
-        else
-          echo "[warn] failed to write $CLAUDE_SETTINGS — left untouched (backup at ${CLAUDE_SETTINGS}.bak.*)"
-          rm -f "${CLAUDE_SETTINGS}.tmp"
-        fi
-      elif [ "$EXISTING" = "python3 \"$STABLE_STATUSLINE\"" ]; then
-        echo "[=] status line already enabled"
-      else
-        echo "[=] status line already configured (left as-is). To use the plugin's:"
-        echo "    set statusLine.command in $CLAUDE_SETTINGS to:"
-        echo "      python3 \"$STABLE_STATUSLINE\""
-      fi
-    fi
-  fi
+  bash "$PLUGIN_ROOT/scripts/_ensure_statusline.sh" "$STABLE_STATUSLINE"
 fi
 
 # ---------------------------------------------------------------------------

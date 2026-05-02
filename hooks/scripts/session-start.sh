@@ -47,9 +47,15 @@ fi
 
 # Refresh the stable status-line symlink each session so plugin upgrades
 # (which move CLAUDE_PLUGIN_ROOT to a new versioned path) keep working
-# without requiring the user to re-run setup.
+# without requiring the user to re-run setup. Also self-heal the
+# settings.json statusLine entry — if it's missing (e.g. after an
+# uninstall→manual-cleanup→reinstall cycle, since uninstall has no
+# lifecycle hook to clean up after the plugin), re-patch silently.
 if [ -n "$PLUGIN_ROOT" ] && [ -f "$PLUGIN_ROOT/scripts/statusline.py" ] && [ -d "$CONFIG_DIR" ]; then
   ln -sfn "$PLUGIN_ROOT/scripts/statusline.py" "$CONFIG_DIR/statusline.py" 2>/dev/null || true
+  if [ -x "$PLUGIN_ROOT/scripts/_ensure_statusline.sh" ]; then
+    bash "$PLUGIN_ROOT/scripts/_ensure_statusline.sh" "$CONFIG_DIR/statusline.py" --quiet >/dev/null 2>&1 || true
+  fi
 fi
 
 # Auto-detect Obsidian CLI (optional — only used for reactive queries)
