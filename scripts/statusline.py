@@ -24,6 +24,29 @@ CONFIG_FILE = Path(
 )
 
 
+def _plugin_installed() -> bool:
+    """True if the plugin is enabled in ~/.claude/settings.json's enabledPlugins.
+
+    Lets the statusline self-disable when the plugin is uninstalled. Claude Code
+    has no PluginUninstall lifecycle hook, so the orphan statusLine block in
+    settings.json keeps invoking this script. Without this check, the bar would
+    keep rendering as if the plugin were still installed.
+    """
+    settings_file = Path.home() / ".claude/settings.json"
+    if not settings_file.is_file():
+        return False
+    try:
+        with open(settings_file, encoding="utf-8") as f:
+            data = json.load(f)
+    except (json.JSONDecodeError, OSError):
+        return False
+    enabled = data.get("enabledPlugins") or {}
+    return any(
+        key.startswith("obsidian-memory@") and value
+        for key, value in enabled.items()
+    )
+
+
 def _config_flag(name: str, default: bool) -> bool:
     """Read a boolean flag from config.env. Honors env override first.
     Parses minimal `KEY=value` / `export KEY="value"` lines — sufficient for
@@ -121,6 +144,8 @@ def render(text: str = "", project: str = "") -> None:
 
 
 def main() -> None:
+    if not _plugin_installed():
+        return
     if not _config_flag("OBSIDIAN_MEMORY_STATUSLINE_ENABLED", True):
         return
 
