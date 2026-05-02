@@ -39,9 +39,11 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from _vault import (  # noqa: E402
     FRONTMATTER_RE,
     collect_md_files,
+    note_types,
     parse_frontmatter,
     resolve_vault,
 )
+from init_project_vault import VALID_TYPES  # noqa: E402
 from _project_docs import enumerate_project_docs  # noqa: E402
 
 WIKILINK_RE = re.compile(r"\[\[([^\]]+)\]\]")
@@ -140,6 +142,20 @@ def _audit_corpus(label: str, root: Path, files: list[Path], *, project_required
             for k in required:
                 if k not in fm:
                     fm_issues.append({"file": str(rel), "issue": f"missing `{k}`"})
+            # Validate every type in the (possibly multi-) list. Single-string
+            # and bracket-list and YAML-block-list shapes are all collapsed to
+            # a list by note_types(); each element must be a known type.
+            if "type" in fm:
+                types = note_types(fm)
+                if not types:
+                    fm_issues.append({"file": str(rel), "issue": "empty `type`"})
+                else:
+                    for t in types:
+                        if t not in VALID_TYPES:
+                            fm_issues.append({
+                                "file": str(rel),
+                                "issue": f"unknown type `{t}` (valid: {', '.join(VALID_TYPES)})",
+                            })
             if _HAS_YAML:
                 m = FRONTMATTER_RE.match(text)
                 if m is not None:

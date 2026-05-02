@@ -80,15 +80,73 @@ def collect_md_files(vault: Path) -> list[Path]:
 
 
 def parse_frontmatter(text: str) -> dict[str, str] | None:
+    """Parse YAML-ish frontmatter into a flat dict[str, str].
+
+    For multi-line YAML block lists, the leading `key:` line captures only
+    the empty value; subsequent `  - item` lines are folded into the
+    previous key as `[item1, item2]` inline form so callers see a
+    consistent shape. Most fields are simple strings; `type:` is the only
+    field that uses lists today.
+    """
     m = FRONTMATTER_RE.match(text)
     if not m:
         return None
     fm: dict[str, str] = {}
+    last_key: str | None = None
+    pending_block: list[str] = []
+
+    def flush_block() -> None:
+        nonlocal pending_block, last_key
+        if last_key and pending_block:
+            fm[last_key] = "[" + ", ".join(pending_block) + "]"
+        pending_block = []
+
     for line in m.group(1).splitlines():
-        if ":" in line and not line.lstrip().startswith("#"):
+        stripped = line.lstrip()
+        if stripped.startswith("#"):
+            continue
+        # YAML block-list continuation under the previous key
+        if last_key and stripped.startswith("- ") and line[:1] in (" ", "\t"):
+            item = stripped[2:].strip().strip('"').strip("'")
+            if item:
+                pending_block.append(item)
+            continue
+        flush_block()
+        if ":" in line:
             k, v = line.split(":", 1)
-            fm[k.strip()] = v.strip()
+            key = k.strip()
+            val = v.strip()
+            fm[key] = val
+            last_key = key
+        else:
+            last_key = None
+    flush_block()
     return fm
+
+
+def note_types(fm: dict[str, str] | None) -> list[str]:
+    """Return the note's types as an ordered list.
+
+    Handles three frontmatter shapes uniformly:
+      type: decision              → ["decision"]
+      type: [decision, learning]  → ["decision", "learning"]
+      type:                       → ["decision", "learning"]
+        - decision                  (block form folded by parse_frontmatter
+        - learning                   into inline form first)
+
+    Routing precedence: the first element wins (controls destination
+    folder). Filtering treats the list as membership: `--type X` matches
+    any note where X appears anywhere in the list.
+    """
+    if not fm:
+        return []
+    raw = (fm.get("type") or "").strip()
+    if not raw:
+        return []
+    if raw.startswith("[") and raw.endswith("]"):
+        inner = raw[1:-1]
+        return [t.strip().strip('"').strip("'") for t in inner.split(",") if t.strip()]
+    return [raw.strip('"').strip("'")]
 
 
 def read_note(path: Path) -> tuple[dict[str, str] | None, str]:
@@ -156,7 +214,7 @@ def search(
                     continue
             fm, body = read_note(f)
             fm = fm or {}
-            if type_ is not None and fm.get("type") != type_:
+            if type_ is not None and type_ not in note_types(fm):
                 continue
             if after or before:
                 d = _parse_date(fm.get("created", ""))
@@ -175,10 +233,17 @@ def search(
                     continue
             else:
                 score = 1
+            types = note_types(fm)
             hits.append((score, {
                 "corpus": corpus_label,
                 "path": str(f),
-                "type": fm.get("type", ""),
+                # Backward compat: callers expect a string. Multi-type notes
+                # serialize as the bracketed form so consumers can still see
+                # all types, while single-type notes remain a bare string.
+                "type": types[0] if len(types) == 1 else (
+                    "[" + ", ".join(types) + "]" if types else ""
+                ),
+                "types": types,
                 "description": fm.get("description", ""),
                 "project": fm.get("project", ""),
                 "created": fm.get("created", ""),
@@ -195,16 +260,24 @@ def search(
 # ---------------------------------------------------------------------------
 # Overview generation (for SessionStart)
 # ---------------------------------------------------------------------------
-def _bullet(path: Path, fm: dict[str, str]) -> str:
+def _bullet(path: Path, fm: dict[str, str], *, primary_type: str | None = None) -> str:
     desc = fm.get("description", "").strip()
     # Emit absolute paths so the gate can copy them verbatim into `read`
     # without per-vault root resolution downstream — collisions become
     # impossible and the validator collapses to `[ -f "$p" ]`.
     base = f"- {path}"
+    # Multi-type hint: when listing a note under one of its types, show
+    # the *other* types in brackets so the gate sees the note has more
+    # dimensions than the heading alone implies.
+    types = note_types(fm)
+    if primary_type is not None and len(types) > 1:
+        others = [t for t in types if t != primary_type]
+        if others:
+            base = f"{base} [also: {', '.join(others)}]"
     return f"{base} — {desc}" if desc else base
 
 
-_TYPE_ORDER = ("preference", "reference", "decision", "learning", "tool", "journal")
+_TYPE_ORDER = ("preference", "reference", "findings", "decision", "learning", "tool", "journal")
 _RECENT_JOURNAL_LIMIT = 5
 
 
@@ -269,15 +342,20 @@ def overview(vault: Path, project: str | None = None, mode: str = "full") -> str
             other_notes_by_project.setdefault(proj, []).append((f, fm))
 
     def emit_by_type(items: list[tuple[Path, dict[str, str]]]) -> None:
+        # Multi-type notes appear under each of their types — recall over
+        # compactness. The "[also: …]" annotation in _bullet keeps the
+        # connection between duplicates visible.
         by_type: dict[str, list[tuple[Path, dict[str, str]]]] = {}
         for f, fm in items:
-            by_type.setdefault(fm.get("type", "untyped"), []).append((f, fm))
+            types = note_types(fm) or ["untyped"]
+            for t in types:
+                by_type.setdefault(t, []).append((f, fm))
         ordered_types = [t for t in _TYPE_ORDER if t in by_type]
         ordered_types += sorted(t for t in by_type if t not in _TYPE_ORDER)
         for type_ in ordered_types:
             out.append(f"#### {type_}")
             for f, fm in by_type[type_]:
-                out.append(_bullet(f, fm))
+                out.append(_bullet(f, fm, primary_type=type_))
 
     if mode == "tools-and-general":
         out.append("## Notes (general)")
@@ -356,7 +434,10 @@ def overview_project(project_vault: Path, project: str | None = None) -> str:
         fm, _ = read_note(f)
         if not fm or "type" not in fm or "description" not in fm:
             continue
-        by_type.setdefault(fm.get("type", "untyped"), []).append((f, fm))
+        # Multi-type notes appear under each of their types (same recall
+        # rationale as the personal-vault overview).
+        for t in note_types(fm) or ["untyped"]:
+            by_type.setdefault(t, []).append((f, fm))
 
     title = f"Project vault: {project}" if project else f"Project vault: {project_vault.name}"
     out: list[str] = [f"# {title}", ""]
@@ -365,11 +446,13 @@ def overview_project(project_vault: Path, project: str | None = None) -> str:
         out.append("")
         return "\n".join(out)
 
-    for type_ in sorted(by_type.keys()):
+    ordered_types = [t for t in _TYPE_ORDER if t in by_type]
+    ordered_types += sorted(t for t in by_type if t not in _TYPE_ORDER)
+    for type_ in ordered_types:
         items = sorted(by_type[type_], key=lambda x: x[0])
         out.append(f"## {type_}")
         for f, fm in items:
-            out.append(_bullet(f, fm))
+            out.append(_bullet(f, fm, primary_type=type_))
         out.append("")
 
     return "\n".join(out)

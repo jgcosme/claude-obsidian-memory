@@ -26,15 +26,14 @@ fi
 
 CONFIG_DIR="${HOME}/.config/obsidian-memory"
 CONFIG_FILE="${CONFIG_DIR}/config.env"
-# Source config inside a subshell-style guard so a malformed config.env doesn't
-# abort setup mid-way through scaffolding.
+# Source config tolerantly: `set +u` so unset vars referenced in the file
+# don't abort, `|| true` so a parse error doesn't kill setup mid-scaffold.
+# Defaults below cover anything the file failed to set.
 if [ -f "$CONFIG_FILE" ]; then
-  if ! ( set +u; . "$CONFIG_FILE" ) 2>/dev/null; then
-    echo "warning: $CONFIG_FILE failed to source cleanly — using defaults" >&2
-  else
-    # shellcheck disable=SC1090
-    . "$CONFIG_FILE" || true
-  fi
+  set +u
+  # shellcheck disable=SC1090
+  . "$CONFIG_FILE" || echo "warning: $CONFIG_FILE failed to source cleanly — using defaults" >&2
+  set -u
 fi
 
 VAULT_PATH="${OBSIDIAN_VAULT_PATH:-$HOME/Documents/Obsidian Memory}"
@@ -190,20 +189,33 @@ if [ -f "$PLUGIN_STATUSLINE" ]; then
       mkdir -p "$(dirname "$CLAUDE_SETTINGS")"
       echo '{}' > "$CLAUDE_SETTINGS"
     fi
-    EXISTING=$(jq -r '.statusLine.command // empty' "$CLAUDE_SETTINGS" 2>/dev/null || echo "")
-    if [ -z "$EXISTING" ]; then
-      cp "$CLAUDE_SETTINGS" "${CLAUDE_SETTINGS}.bak.$(date +%Y%m%d%H%M%S)"
-      jq --arg cmd "python3 \"$STABLE_STATUSLINE\"" \
-         '.statusLine = {type: "command", command: $cmd}' \
-         "$CLAUDE_SETTINGS" > "${CLAUDE_SETTINGS}.tmp" \
-        && mv "${CLAUDE_SETTINGS}.tmp" "$CLAUDE_SETTINGS"
-      echo "[+] enabled status line in $CLAUDE_SETTINGS"
-    elif [ "$EXISTING" = "python3 \"$STABLE_STATUSLINE\"" ]; then
-      echo "[=] status line already enabled"
+    # Validate JSON before touching it. A malformed settings.json would have
+    # caused jq's read to silently produce empty output (treated as "no
+    # statusLine configured"), the patch attempt to fail at write time, and
+    # the user to see "[+] enabled status line" with no actual change.
+    if ! jq -e empty "$CLAUDE_SETTINGS" >/dev/null 2>&1; then
+      echo "[warn] $CLAUDE_SETTINGS is not valid JSON — skipping status line patch."
+      echo "       Fix the file (or delete it to start fresh) and re-run setup."
     else
-      echo "[=] status line already configured (left as-is). To use the plugin's:"
-      echo "    set statusLine.command in $CLAUDE_SETTINGS to:"
-      echo "      python3 \"$STABLE_STATUSLINE\""
+      EXISTING=$(jq -r '.statusLine.command // empty' "$CLAUDE_SETTINGS" 2>/dev/null || echo "")
+      if [ -z "$EXISTING" ]; then
+        cp "$CLAUDE_SETTINGS" "${CLAUDE_SETTINGS}.bak.$(date +%Y%m%d%H%M%S)"
+        if jq --arg cmd "python3 \"$STABLE_STATUSLINE\"" \
+             '.statusLine = {type: "command", command: $cmd}' \
+             "$CLAUDE_SETTINGS" > "${CLAUDE_SETTINGS}.tmp" \
+           && mv "${CLAUDE_SETTINGS}.tmp" "$CLAUDE_SETTINGS"; then
+          echo "[+] enabled status line in $CLAUDE_SETTINGS"
+        else
+          echo "[warn] failed to write $CLAUDE_SETTINGS — left untouched (backup at ${CLAUDE_SETTINGS}.bak.*)"
+          rm -f "${CLAUDE_SETTINGS}.tmp"
+        fi
+      elif [ "$EXISTING" = "python3 \"$STABLE_STATUSLINE\"" ]; then
+        echo "[=] status line already enabled"
+      else
+        echo "[=] status line already configured (left as-is). To use the plugin's:"
+        echo "    set statusLine.command in $CLAUDE_SETTINGS to:"
+        echo "      python3 \"$STABLE_STATUSLINE\""
+      fi
     fi
   fi
 fi
@@ -229,21 +241,29 @@ if [ -n "$OBSIDIAN_REGISTRY" ] && command -v jq >/dev/null 2>&1; then
     '[.vaults // {} | to_entries[] | select(.value.path == $p)] | length' \
     "$OBSIDIAN_REGISTRY" 2>/dev/null || echo 0)
   if [ "$ALREADY" = "0" ]; then
+    # If Obsidian.app is running, refuse to patch obsidian.json — its quit-time
+    # write would race ours and silently lose the registration. Better to ask
+    # the user to quit it (or register the vault from Obsidian's UI directly)
+    # than to half-write and have it disappear minutes later.
     OBSIDIAN_RUNNING=0
     if pgrep -x Obsidian >/dev/null 2>&1; then OBSIDIAN_RUNNING=1; fi
-    VAULT_ID=$(python3 -c 'import secrets; print(secrets.token_hex(8))')
-    TS_MS=$(python3 -c 'import time; print(int(time.time()*1000))')
-    cp "$OBSIDIAN_REGISTRY" "${OBSIDIAN_REGISTRY}.bak.$(date +%Y%m%d%H%M%S)"
-    if jq --arg id "$VAULT_ID" --arg p "$VAULT_PATH" --argjson ts "$TS_MS" \
-         '.vaults = ((.vaults // {}) + {($id): {path: $p, ts: $ts}})' \
-         "$OBSIDIAN_REGISTRY" > "${OBSIDIAN_REGISTRY}.tmp" \
-       && mv "${OBSIDIAN_REGISTRY}.tmp" "$OBSIDIAN_REGISTRY"; then
-      echo "[+] registered vault with Obsidian.app"
-      if [ "$OBSIDIAN_RUNNING" = "1" ]; then
-        echo "[warn] Obsidian.app is running — quit and relaunch for the new vault to appear in the switcher."
-      fi
+    if [ "$OBSIDIAN_RUNNING" = "1" ]; then
+      echo "[skip] Obsidian.app is running — vault not auto-registered."
+      echo "       Register the vault by either:"
+      echo "         1. Quit Obsidian and re-run this setup script, OR"
+      echo "         2. In Obsidian: 'Open folder as vault' → choose $VAULT_PATH"
     else
-      echo "[warn] failed to write $OBSIDIAN_REGISTRY — register the vault manually via Obsidian's 'Open folder as vault'."
+      VAULT_ID=$(python3 -c 'import secrets; print(secrets.token_hex(8))')
+      TS_MS=$(python3 -c 'import time; print(int(time.time()*1000))')
+      cp "$OBSIDIAN_REGISTRY" "${OBSIDIAN_REGISTRY}.bak.$(date +%Y%m%d%H%M%S)"
+      if jq --arg id "$VAULT_ID" --arg p "$VAULT_PATH" --argjson ts "$TS_MS" \
+           '.vaults = ((.vaults // {}) + {($id): {path: $p, ts: $ts}})' \
+           "$OBSIDIAN_REGISTRY" > "${OBSIDIAN_REGISTRY}.tmp" \
+         && mv "${OBSIDIAN_REGISTRY}.tmp" "$OBSIDIAN_REGISTRY"; then
+        echo "[+] registered vault with Obsidian.app"
+      else
+        echo "[warn] failed to write $OBSIDIAN_REGISTRY — register the vault manually via Obsidian's 'Open folder as vault'."
+      fi
     fi
   else
     echo "[=] vault already registered with Obsidian.app"

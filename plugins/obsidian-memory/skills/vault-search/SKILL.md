@@ -18,7 +18,7 @@ python3 "${CLAUDE_PLUGIN_ROOT}/scripts/_vault.py" \
   --vault "$OBSIDIAN_VAULT_PATH" \
   search \
   --keywords "<2-4 keywords>" \
-  [--type <preference|reference|decision|learning|tool|journal>] \
+  [--type <preference|reference|findings|decision|learning|tool|journal>] \
   [--path-prefix <Tools|Notes|Journals|Journals/<project>>] \
   [--created-after YYYY-MM-DD] \
   [--project-vault $CLAUDE_PROJECT_DIR] \
@@ -41,7 +41,10 @@ obsidian search query="[type:decision] keywords"
 - **Troubleshooting** (user describes a symptom or error) → `_vault.py search --type learning --keywords "<symptom keywords>"`. Saved learnings often capture the gotcha.
 - **Tool setup** (user about to invoke an external tool) → `_vault.py search --type tool --keywords "<tool name>"` or `Read "Tools/<Tool>.md"` if you know the path.
 - **Project decision history** ("what did we decide about X?") → `_vault.py search --type decision --keywords "<topic>"` (filter by `project:` tag in results, or pass `--project-vault $CLAUDE_PROJECT_DIR` to also search the project's repo docs).
+- **Prior research / synthesis** ("did we already look at X?", "what did we find when comparing Y options?") → `_vault.py search --type findings --keywords "<topic>"`. Save a re-investigation if a prior `findings` note covers the territory.
 - **Unknown but project-scoped** → `_vault.py search --keywords "<topic>" --project-vault $CLAUDE_PROJECT_DIR` and filter by the `project:` tag and `corpus` field in results.
+
+`--type X` matches notes where `X` appears anywhere in the (possibly multi-) type list, so a `[findings, decision]` note shows up under both `--type findings` and `--type decision`.
 
 ## Notes
 

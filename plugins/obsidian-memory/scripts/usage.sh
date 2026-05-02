@@ -122,8 +122,7 @@ for kind, category in ORDER:
     suffix = "" if n == 1 else "s"
     if category == "injected":
         if n == 0:
-            label = "0 events" if kind == "gate_inject" else "0 events"
-            print(f"  \033[2m{kind:<14}\033[0m [injected]  {label}")
+            print(f"  \033[2m{kind:<14}\033[0m [injected]  0 events")
             continue
         chars = sum(int(e.get("chars", 0) or 0) for e in items)
         tok = sum(int(e.get("approx_tokens", 0) or 0) for e in items)

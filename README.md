@@ -107,14 +107,18 @@ Frontmatter on every note (except `README.md` files):
 
 ```yaml
 ---
-type: preference | reference | decision | learning | tool | journal
+type: preference | reference | findings | decision | learning | tool | journal
 description: "one-line hook"
 created: YYYY-MM-DD
 project: <project-name>     # only when the note is project-scoped
 ---
 ```
 
-Six types. `type` lives in frontmatter; the auto-overview groups by `type:` rather than by folder, so the layout stays browsable while staying flat.
+Seven types — `findings` captures multi-source research synthesis (read several docs, compared options, mapped a territory) so a future session can re-read the synthesis instead of redoing the investigation. Notes that genuinely span axes can declare a list — `type: [findings, decision]` for research that ended in a choice — and appear under each of their types in the overview. The first type drives routing.
+
+`type` lives in frontmatter; the auto-overview groups by `type:` rather than by folder, so the layout stays browsable while staying flat.
+
+Canonical type semantics live in [`plugins/obsidian-memory/templates/types.md`](./plugins/obsidian-memory/templates/types.md) — the single source of truth used by `save-memory`, the SessionEnd review, and `init_project_vault.py`.
 
 If you already have your own Obsidian vault, the plugin's vault sits beside it as a separate top-level vault. Open whichever one you want in Obsidian.app — the plugin only reads/writes inside its own vault.
 
@@ -150,7 +154,7 @@ Two files live in `~/.config/obsidian-memory/`:
 
   ```json
   {
-    "repos": {
+    "projects": {
       "/abs/path/to/your/repo": {
         "enabled": true,
         "project": "your-repo-basename"

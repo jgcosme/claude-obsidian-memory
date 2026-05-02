@@ -35,7 +35,7 @@ def fmt_ts(ts: str) -> str:
     # Trim to seconds: 2026-04-29T12:24:51.697Z → 2026-04-29T12:24:51Z
     if "." in ts:
         head, tail = ts.split(".", 1)
-        return head + "Z" if tail else head
+        return (head + "Z") if tail else head
     return ts
 
 
@@ -43,8 +43,10 @@ def extract_text(content) -> tuple[str, list[str]]:
     """Return (concatenated text, list of tool names used).
 
     `content` is either a string or a list of content blocks per the API
-    schema. We keep `text` blocks and `thinking` blocks (the visible-to-user
-    portion); we list `tool_use` block names but not their inputs.
+    schema. We keep `text` blocks (the visible-to-user portion), drop
+    `thinking` blocks (verbose, not user-visible), and list `tool_use`
+    block names without their inputs. `tool_result` blocks live on user
+    messages and are dropped by `slim_user_content`.
     """
     if isinstance(content, str):
         return content, []

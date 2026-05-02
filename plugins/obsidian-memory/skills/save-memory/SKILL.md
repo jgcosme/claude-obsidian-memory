@@ -10,50 +10,67 @@ The personal vault is `$OBSIDIAN_VAULT_PATH` (or `~/Documents/Obsidian Memory` i
 
 ## 1. Search first
 
-A near-duplicate is more useful than a new note. Run:
+A near-duplicate is more useful than a new note. Build the search command, adding `--project-vault` only when the current project is registered + enabled in `projects.json`:
 
 ```bash
+PROJECT_ROOT=$(git -C "${CLAUDE_PROJECT_DIR:-$PWD}" rev-parse --show-toplevel 2>/dev/null || true)
+PROJECT_VAULT_ARG=""
+if [ -n "$PROJECT_ROOT" ]; then
+  STATUS=$(python3 "${CLAUDE_PLUGIN_ROOT}/scripts/_projects.py" lookup "$PROJECT_ROOT" 2>/dev/null || echo "")
+  [ "$STATUS" = "enabled" ] && PROJECT_VAULT_ARG="--project-vault $PROJECT_ROOT"
+fi
 python3 "${CLAUDE_PLUGIN_ROOT}/scripts/_vault.py" \
   --vault "$OBSIDIAN_VAULT_PATH" \
   search \
   --keywords "<2-4 keywords from the moment>" \
-  --project-vault "$CLAUDE_PROJECT_DIR" \
+  $PROJECT_VAULT_ARG \
   --json
 ```
 
-The `--project-vault` arg is harmless when the project isn't registered (no extra results). Results carry a `corpus` field — `personal` or `project`. If a match exists, propose **extending** that note rather than creating a new one. Read the match first; preserve its body and append.
+Results carry a `corpus` field — `personal` or `project`. If a match exists, propose **extending** that note rather than creating a new one. Read the match first; preserve its body and append.
 
-## 2. Pick the type (one of six)
+(Always passing `--project-vault $CLAUDE_PROJECT_DIR` would walk an unregistered repo's markdown too — any third-party `.md` with frontmatter would surface as a false dedup hit. Gate on `STATUS = enabled` so dedup only sees real corpus members.)
+
+## 2. Pick the type(s)
+
+The canonical type definitions live in `${CLAUDE_PLUGIN_ROOT}/templates/types.md` — read that file when you need the full semantics. Quick reference:
 
 | Type | What it captures |
 |---|---|
-| `preference` | behavioral rule ("always do X", "stop doing Y") |
-| `reference` | factual lookup (URLs, IDs, configs, findings, channels, endpoints) |
+| `reference` | atomic factual lookup (URLs, IDs, configs, channels, endpoints) |
+| `findings` | synthesis from reading multiple sources — territory map / comparison |
+| `learning` | easy-to-miss gotchas and fixes — foot-gun database |
 | `decision` | choice rationale ("we chose X because Y") |
-| `learning` | discovered insight, gotcha, or fix |
+| `preference` | behavioral rule ("always do X", "stop doing Y") |
 | `tool` | how to use a CLI/API/service |
 | `journal` | **never written by this skill** — SessionEnd handles journals |
 
+A note can carry multiple types when it genuinely spans axes — e.g. a research investigation that ended in a choice is `[findings, decision]`. Order by routing precedence (first type drives the destination folder). Single-type notes stay as a bare string.
+
+**Be proactive with `findings`.** When you've spent a turn (or several) reading multiple sources, comparing options, or mapping a territory, capture the synthesis as a `findings` note before moving on — the bar is "would a future session repeat this investigation if I didn't write it down?".
+
 ## 3. Route the note
 
-Apply this rule. Pick exactly one destination:
+The first type in the list drives routing. Apply this rule:
 
 ```
-A. type == tool
+PRIMARY = types[0]
+
+A. PRIMARY == tool
    → $OBSIDIAN_VAULT_PATH/Tools/<slug>.md
      (Tools are always personal-vault and cross-project; no project: tag.)
 
-B. type == preference
+B. PRIMARY == preference
    → $OBSIDIAN_VAULT_PATH/Notes/<slug>.md
      (Add project: tag only if the rule is narrowly scoped to one project.)
 
-C. type in {reference, decision, learning}:
+C. PRIMARY in {reference, findings, decision, learning}:
    1. Look up cwd's project-vault status:
         STATUS=$(python3 "${CLAUDE_PLUGIN_ROOT}/scripts/_projects.py" lookup "$CLAUDE_PROJECT_DIR")
 
    2. If STATUS == enabled, ask whether a matching repo folder exists:
         FOLDER=$(python3 "${CLAUDE_PLUGIN_ROOT}/scripts/_project_docs.py" \
-                  match-type-folder "$CLAUDE_PROJECT_DIR" --type <type>)
+                  match-type-folder "$CLAUDE_PROJECT_DIR" --type <PRIMARY>)
       If exit=0, FOLDER is the repo-relative path (e.g. `docs/decisions`).
 
    3. Decide:
@@ -73,12 +90,25 @@ WIP guard for project-vault writes: before writing to an *existing* file in the 
 
 ## 4. Frontmatter (required on every new note)
 
+Single type:
+
 ```yaml
 ---
-type: <preference|reference|decision|learning|tool>
+type: decision
 description: "one-line hook"
 created: YYYY-MM-DD
 project: <name>     # only if project-scoped
+---
+```
+
+Multi-type (note genuinely spans axes — first type drives routing):
+
+```yaml
+---
+type: [findings, decision]
+description: "one-line hook"
+created: YYYY-MM-DD
+project: <name>
 ---
 ```
 
@@ -107,9 +137,13 @@ On `n` or anything else, drop it and return to the user's task.
 
 For `preference` notes, lead with the rule itself, then a `**Why:**` line (the user-given reason) and a `**How to apply:**` line (when/where this kicks in). Knowing *why* lets future sessions judge edge cases instead of blindly following the rule.
 
-For `decision` / `learning` notes, lead with the decision or finding, then briefly state the alternatives considered or the cause of the gotcha, then how to apply.
+For `decision` notes, lead with the choice, then alternatives considered, then the reason, then conditions under which we'd revisit.
 
-For `reference` notes, lead with the fact (URL, ID, command, finding). Add only context that's not derivable from the fact itself.
+For `learning` notes, lead with the gotcha, then the cause, then how to apply (what to do or avoid). The note should make a future session say "ah, I would have hit that — glad we wrote it down."
+
+For `findings` notes, lead with the question investigated, then sources consulted (URLs / paths only — addresses, not bodies), then the synthesis / takeaways, then open questions. The whole point is that a future session can re-read this instead of redoing the research.
+
+For `reference` notes, lead with the fact (URL, ID, command). Add only context that's not derivable from the fact itself.
 
 For `tool` notes, lead with install path / binary location, then auth credential location (variable name only — never the value), scopes/permissions, key commands, and gotchas.
 

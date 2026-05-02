@@ -10,7 +10,7 @@
       "name": "obsidian-memory",
       "source": "./plugins/obsidian-memory",
       "description": "Obsidian-backed persistent memory for Claude Code",
-      "version": "1.5.6"
+      "version": "1.15.0"
     }
   ]
 }

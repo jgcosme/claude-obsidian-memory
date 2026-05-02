@@ -324,12 +324,17 @@ trap 'rm -f "$TMP"' EXIT
 
 is_safe_path() {
   # Paths from the overview are absolute, and must resolve under one of the
-  # known vault roots. Reject anything that isn't absolute, contains "..",
-  # or escapes both roots — the gate output is model-generated, not user-
-  # controlled, but a sanity check is cheap insurance.
+  # known vault roots. Reject anything that isn't absolute, contains a `..`
+  # path-traversal *segment*, or escapes both roots — the gate output is
+  # model-generated, not user-controlled, but a sanity check is cheap
+  # insurance.
+  #
+  # Match `..` only as a path component (e.g. `/foo/../bar`) so legitimate
+  # filenames containing two dots (`v2.0..plan.md`, `notes..wip.md`) aren't
+  # collateral damage from a substring match.
   local p="$1"
   case "$p" in /*) ;; *) return 1 ;; esac
-  case "$p" in *..*) return 1 ;; esac
+  case "$p" in */../*|*/..|../*|..) return 1 ;; esac
   case "$p" in "$VAULT"/*) return 0 ;; esac
   if [ -n "${PROJECT_VAULT_PATH:-}" ]; then
     case "$p" in "$PROJECT_VAULT_PATH"/*) return 0 ;; esac

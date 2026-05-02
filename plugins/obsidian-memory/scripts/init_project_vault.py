@@ -47,12 +47,17 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from _project_docs import enumerate_project_docs  # noqa: E402
 from _vault import FRONTMATTER_RE  # noqa: E402
 
-VALID_TYPES = ("preference", "reference", "decision", "learning", "tool", "journal")
+VALID_TYPES = ("preference", "reference", "findings", "decision", "learning", "tool", "journal")
 FALLBACK_TYPE = "reference"
 H1_RE = re.compile(r"^#\s+(.+?)\s*$", re.MULTILINE)
 MAX_DESCRIPTION_LEN = 120
 # Per-file body excerpt budget (chars) when batching for the LLM.
 LLM_EXCERPT_CHARS = 600
+# Chunk size for the batched LLM classify call. Doc-heavy repos can have
+# 200+ markdown files; one mega-prompt risks blowing model context (silent
+# fallback to type=reference for everyone). 30 keeps each call comfortably
+# under context budget at LLM_EXCERPT_CHARS=600 per file (~20KB prompt).
+LLM_BATCH_SIZE = 30
 
 
 # ---------------------------------------------------------------------------
@@ -93,21 +98,23 @@ def _excerpt(body: str, n: int = LLM_EXCERPT_CHARS) -> str:
 
 def _build_llm_prompt(candidates: list[tuple[Path, str]]) -> str:
     """One batched classification prompt covering all candidates."""
-    type_list = "\n".join(f"- {t}" for t in VALID_TYPES)
+    types_doc = _load_types_doc()
     parts = [
         "You are classifying markdown files in a project repository to add "
         "Obsidian-style memory frontmatter. For each file, output ONE JSON "
         "object PER LINE — no prose, no code fences, no commentary.",
         "",
         "Schema per line:",
-        '  {"path": "<exact path as given>", "type": "<one of below>", '
+        '  {"path": "<exact path as given>", '
+        '"type": "<single type>" OR ["<type1>", "<type2>", ...], '
         '"description": "<one-line summary, ≤120 chars, no embedded `: `>"}',
         "",
-        "Types:",
-        type_list,
+        types_doc,
         "",
         "Rules:",
         "- If unsure, use \"reference\" — it's the safe fallback.",
+        "- Multi-type allowed: a note that genuinely spans axes can use a "
+        "list. Order by routing precedence (first type drives destination).",
         "- Description: derive from H1 or first paragraph. One line. Replace "
         "any embedded `: ` with ` - ` so the description parses as unquoted YAML.",
         "- Output exactly one line per file, in the same order.",
@@ -119,6 +126,17 @@ def _build_llm_prompt(candidates: list[tuple[Path, str]]) -> str:
         parts.append(_excerpt(body))
         parts.append("")
     return "\n".join(parts)
+
+
+def _load_types_doc() -> str:
+    """Load the canonical types.md so the LLM sees full definitions, not
+    just an enum of names. Falls back to a name-only list if the file
+    isn't where we expect."""
+    types_md = Path(__file__).resolve().parent.parent / "templates" / "types.md"
+    try:
+        return types_md.read_text(encoding="utf-8")
+    except OSError:
+        return "Types:\n" + "\n".join(f"- {t}" for t in VALID_TYPES)
 
 
 def _parse_llm_output(raw: str, candidates: list[tuple[Path, str]]) -> dict[str, dict]:
@@ -138,17 +156,26 @@ def _parse_llm_output(raw: str, candidates: list[tuple[Path, str]]) -> dict[str,
         except json.JSONDecodeError:
             continue
         path = obj.get("path", "")
-        type_ = obj.get("type", "")
+        raw_type = obj.get("type", "")
         desc = obj.get("description", "")
-        if type_ not in VALID_TYPES:
-            type_ = FALLBACK_TYPE
+        # Normalize to a list, drop unknowns, dedupe order-preserving.
+        if isinstance(raw_type, list):
+            cleaned = []
+            for t in raw_type:
+                if isinstance(t, str) and t in VALID_TYPES and t not in cleaned:
+                    cleaned.append(t)
+            types_list = cleaned or [FALLBACK_TYPE]
+        elif isinstance(raw_type, str) and raw_type in VALID_TYPES:
+            types_list = [raw_type]
+        else:
+            types_list = [FALLBACK_TYPE]
         if isinstance(desc, str) and desc:
             desc = re.sub(r"\s+", " ", desc).replace(": ", " - ").strip()
             if len(desc) > MAX_DESCRIPTION_LEN:
                 desc = desc[: MAX_DESCRIPTION_LEN - 1].rstrip() + "…"
         else:
             desc = ""
-        by_path[path] = {"type": type_, "description": desc}
+        by_path[path] = {"types": types_list, "description": desc}
 
     # Fallback for any candidate the LLM didn't classify.
     for rel_path, body in candidates:
@@ -156,23 +183,20 @@ def _parse_llm_output(raw: str, candidates: list[tuple[Path, str]]) -> dict[str,
         if rel_str not in by_path or not by_path[rel_str].get("description"):
             fallback_desc = _derive_description(body, rel_str)
             by_path.setdefault(rel_str, {})
-            by_path[rel_str].setdefault("type", FALLBACK_TYPE)
+            by_path[rel_str].setdefault("types", [FALLBACK_TYPE])
             if not by_path[rel_str].get("description"):
                 by_path[rel_str]["description"] = fallback_desc
     return by_path
 
 
-def _llm_classify(
+def _llm_classify_batch(
     candidates: list[tuple[Path, str]],
     *,
+    claude_bin: str,
     log_path: Path | None = None,
-) -> dict[str, dict]:
-    """Batched claude -p classification. On failure, returns deterministic
-    fallback (every file → type=reference, H1-derived description)."""
-    claude_bin = os.environ.get("CLAUDE_BIN") or shutil.which("claude")
-    if not claude_bin:
-        return _deterministic_fallback(candidates)
-
+) -> dict[str, dict] | None:
+    """Single batched claude -p call for one chunk. Returns parsed map on
+    success, or None on any failure so the caller can fall back."""
     prompt = _build_llm_prompt(candidates)
     env = {**os.environ, "CLAUDE_MEMORY_GATE": "1", "CLAUDE_MEMORY_REVIEW": "1"}
     try:
@@ -191,16 +215,17 @@ def _llm_classify(
         )
     except (subprocess.TimeoutExpired, FileNotFoundError) as e:
         if log_path:
-            log_path.write_text(f"llm classify failed: {e}\n", encoding="utf-8")
-        return _deterministic_fallback(candidates)
+            with log_path.open("a", encoding="utf-8") as f:
+                f.write(f"llm classify failed: {e}\n")
+        return None
 
     if result.returncode != 0:
         if log_path:
-            log_path.write_text(
-                f"llm classify exited {result.returncode}\nstderr: {result.stderr}\n",
-                encoding="utf-8",
-            )
-        return _deterministic_fallback(candidates)
+            with log_path.open("a", encoding="utf-8") as f:
+                f.write(
+                    f"llm classify exited {result.returncode}\nstderr: {result.stderr}\n"
+                )
+        return None
 
     # Unwrap claude -p JSON envelope.
     try:
@@ -218,10 +243,44 @@ def _llm_classify(
     return _parse_llm_output(text, candidates)
 
 
+def _llm_classify(
+    candidates: list[tuple[Path, str]],
+    *,
+    log_path: Path | None = None,
+) -> dict[str, dict]:
+    """Chunked claude -p classification. Splits candidates into LLM_BATCH_SIZE
+    chunks so doc-heavy repos don't blow model context. Each failed chunk
+    falls back deterministically and a one-line note is written to stderr so
+    the user knows the LLM didn't actually classify those files."""
+    claude_bin = os.environ.get("CLAUDE_BIN") or shutil.which("claude")
+    if not claude_bin:
+        print("[init] no claude CLI found — every file will get type=reference", file=sys.stderr)
+        return _deterministic_fallback(candidates)
+
+    out: dict[str, dict] = {}
+    n_chunks = (len(candidates) + LLM_BATCH_SIZE - 1) // LLM_BATCH_SIZE
+    failed_chunks = 0
+    for i in range(0, len(candidates), LLM_BATCH_SIZE):
+        chunk = candidates[i : i + LLM_BATCH_SIZE]
+        result = _llm_classify_batch(chunk, claude_bin=claude_bin, log_path=log_path)
+        if result is None:
+            failed_chunks += 1
+            out.update(_deterministic_fallback(chunk))
+        else:
+            out.update(result)
+    if failed_chunks:
+        print(
+            f"[init] {failed_chunks}/{n_chunks} LLM chunk(s) failed — those files defaulted to "
+            f"type=reference; see {log_path or '<no log>'} for details",
+            file=sys.stderr,
+        )
+    return out
+
+
 def _deterministic_fallback(candidates: list[tuple[Path, str]]) -> dict[str, dict]:
     return {
         str(rel_path): {
-            "type": FALLBACK_TYPE,
+            "types": [FALLBACK_TYPE],
             "description": _derive_description(body, str(rel_path)),
         }
         for rel_path, body in candidates
@@ -231,14 +290,20 @@ def _deterministic_fallback(candidates: list[tuple[Path, str]]) -> dict[str, dic
 # ---------------------------------------------------------------------------
 # Frontmatter writing
 # ---------------------------------------------------------------------------
-def _format_frontmatter(*, type_: str, description: str, project: str) -> str:
+def _format_frontmatter(*, types: list[str], description: str, project: str) -> str:
     today = date.today().isoformat()
     # Always quote description — it may contain wikilinks, brackets, or other
     # YAML-ambiguous chars. Escape embedded double quotes.
     safe_desc = description.replace("\\", "\\\\").replace('"', '\\"')
+    # Single-type → bare string for backward compat. Multi-type → inline
+    # bracket form (note_types parses both shapes).
+    if len(types) == 1:
+        type_field = types[0]
+    else:
+        type_field = "[" + ", ".join(types) + "]"
     return (
         f"---\n"
-        f"type: {type_}\n"
+        f"type: {type_field}\n"
         f'description: "{safe_desc}"\n'
         f"created: {today}\n"
         f"project: {project}\n"
@@ -296,17 +361,25 @@ def init_project_vault(
     for rel_path, body in candidates:
         rel_str = str(rel_path)
         cls = classifications.get(rel_str) or {
-            "type": FALLBACK_TYPE,
+            "types": [FALLBACK_TYPE],
             "description": _derive_description(body, rel_str),
         }
-        type_ = cls["type"] if cls.get("type") in VALID_TYPES else FALLBACK_TYPE
+        # Tolerate the legacy single-`type` key in case anything still passes
+        # the old shape; otherwise consume the new `types` list.
+        if "types" in cls:
+            raw_types = cls["types"]
+        elif "type" in cls:
+            raw_types = [cls["type"]]
+        else:
+            raw_types = [FALLBACK_TYPE]
+        types_list = [t for t in raw_types if t in VALID_TYPES] or [FALLBACK_TYPE]
         desc = cls.get("description") or _derive_description(body, rel_str)
 
-        fm = _format_frontmatter(type_=type_, description=desc, project=project)
+        fm = _format_frontmatter(types=types_list, description=desc, project=project)
         target = repo / rel_path
         if not dry_run:
             _write_file(target, fm, body)
-        added.append({"path": rel_str, "type": type_, "description": desc})
+        added.append({"path": rel_str, "types": types_list, "description": desc})
 
     return {"added": added, "skipped": skipped}
 
@@ -347,7 +420,8 @@ def main(argv: list[str] | None = None) -> int:
     if result["added"]:
         print(f"{verb} frontmatter to {len(result['added'])} file(s):")
         for item in result["added"]:
-            print(f"  + [{item['type']}] {item['path']} — {item['description']}")
+            type_disp = ",".join(item.get("types") or [item.get("type", FALLBACK_TYPE)])
+            print(f"  + [{type_disp}] {item['path']} — {item['description']}")
     else:
         print("no candidates needed frontmatter")
     if result["skipped"]:

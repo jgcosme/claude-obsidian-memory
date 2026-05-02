@@ -87,9 +87,11 @@ The skill is the **eager** path for in-session writes — moments are captured a
 5. Runs an integrity + reconciliation pass over three corpora:
    - **(a) own writes** from steps 2–4 — frontmatter complete, wikilinks resolve, `description`-vs-body drift on extends/corrects.
    - **(b) journal-linked notes** — non-journal notes referenced from today's journal entry get the same `description`-vs-body check.
-   - **(c) vault `*.md` changes since last commit** (via the `vault_head` SHA recorded by `SessionStart`, falling back to working-tree-only diff) — *backlink reconciliation*:
+   - **(c) personal-vault `*.md` changes since last commit** (via the `vault_head` SHA recorded by `SessionStart`, falling back to working-tree-only diff) — *backlink reconciliation*:
      - **renamed (old → new)** → finds every incoming `[[wikilink]]` resolving to the old path (path-qualified literal match, or unambiguous bare basename) via `_vault.py incoming-wikilinks --target <old>` and auto-rewrites each to the new path (smallest edit, `|alias` text preserved). Listed under `## Backlink rewrites`.
      - **deleted** → lists incoming wikilinks under `## Broken backlinks (target deleted)`. Never auto-fixed — deletion may be intentional or a rename the diff couldn't infer.
+
+   Backlink reconciliation in step (c) is scoped to the **personal vault only** — the project-vault is the user's repo and commits on the user's cadence, so renaming a project-vault note doesn't trigger an automatic rewrite. Run `/obsidian-memory:audit` if you need cross-corpus integrity.
 
 6. Independently `git add -A && git commit`s any vault changes when `OBSIDIAN_MEMORY_AUTOCOMMIT=true` (default) — including backlink rewrites from step 5. Push is opt-in (`OBSIDIAN_MEMORY_AUTOPUSH=true`). Wrapped in `flock` to prevent concurrent sessions racing.
 
@@ -101,19 +103,21 @@ The hook returns immediately; the review runs in the background and logs to `/tm
 
 ### Routing rules
 
-Type-driven, single decision tree. Mirrors the save-memory skill (see [Federated project-vaults](#federated-project-vaults) for full details).
+Type-driven, single decision tree. Mirrors the save-memory skill (see [Federated project-vaults](#federated-project-vaults) for full details). Notes can carry multiple types (`type: [findings, decision]`); routing uses the first.
 
 ```
-type == journal     → Journals/<project>/<date>.md  (always, SessionEnd-only)
-type == tool        → Tools/<slug>.md        (always personal)
-type == preference  → Notes/<slug>.md        (project: tag if scoped)
-type ∈ {reference, decision, learning}:
+PRIMARY = types[0]
+
+PRIMARY == journal     → Journals/<project>/<date>.md  (always, SessionEnd-only)
+PRIMARY == tool        → Tools/<slug>.md        (always personal)
+PRIMARY == preference  → Notes/<slug>.md        (project: tag if scoped)
+PRIMARY ∈ {reference, findings, decision, learning}:
   cwd's project registered+enabled AND repo has matching folder
-                     → repo-vault <folder>/<slug>.md
-  otherwise          → Notes/<slug>.md       (project: tag if scoped)
+                        → repo-vault <folder>/<slug>.md
+  otherwise             → Notes/<slug>.md       (project: tag if scoped)
 ```
 
-Folder-match for the repo-vault path: case-insensitive on basename, top-level + one level under `docs/`. `decision → decisions/|adr/|decision-records/`; `learning → learnings/|lessons/`; `reference → references/`. Project-vault writes leave the repo's working tree dirty for the user to commit; the personal vault auto-commits at SessionEnd.
+Folder-match for the repo-vault path: case-insensitive on basename, top-level + one level under `docs/`. `decision → decisions/|adr/|decision-records/`; `findings → findings/|research/`; `learning → learnings/|lessons/`; `reference → references/`. Project-vault writes leave the repo's working tree dirty for the user to commit; the personal vault auto-commits at SessionEnd.
 
 ## Token telemetry (`/obsidian-memory:usage`)
 
@@ -143,7 +147,7 @@ A "project-vault" is a project repo whose own markdown files participate as a se
 
 - `~/.config/obsidian-memory/projects.json` is the single source of truth. Schema:
   ```json
-  { "repos": { "/abs/path": { "enabled": bool, "project": "name" } } }
+  { "projects": { "/abs/path": { "enabled": bool, "project": "name" } } }
   ```
 - `SessionStart` looks up cwd's git toplevel. If absent from `projects.json` and the repo has ≥1 candidate `.md`, it injects a one-time prompt asking the user once. Either answer (yes or no) is recorded; the prompt won't fire again.
 - `_projects.py` (`lookup`/`register`/`list`/`path` subcommands) is the helper that reads and writes the file. Hooks, the audit slash command, and `statusline.py` all go through it.
@@ -165,18 +169,20 @@ A "project-vault" is a project repo whose own markdown files participate as a se
 
 - `_vault.py search` and `overview` accept a `--project-vault <path>` flag. When set, both corpora are walked and results carry a `corpus` field (`personal` / `project`).
 - The `_overview.sh` helper accepts a third positional arg for the project-vault path. Cache key spans `(personal_vault | project | repo_vault_path)`; cache freshness check (`find -newer`) walks both directories.
-- The retrieval gate (`UserPromptSubmit`) reads the project-vault path from `/tmp/claude-memory-session/<session_id>.project_vault` (written by `SessionStart`) so it doesn't re-query the registry per turn.
+- The retrieval gate (`UserPromptSubmit`) resolves the project-vault path freshly per turn by re-reading `projects.json` directly (one `git rev-parse` + one `jq` read). Cheap, and it always reflects the live registry — so `/obsidian-memory:project enable|disable` takes effect immediately without restarting the session.
 
-**Write routing** (save-memory):
+**Write routing** (save-memory). Notes can carry multiple types; the first drives routing.
 
 ```
-type == journal     → personal Journals/<project>/  (always; SessionEnd-only)
-type == tool        → personal Tools/      (always; cross-project by nature)
-type == preference  → personal Notes/      (always; project: tag if scoped)
-type ∈ {reference, decision, learning}:
+PRIMARY = types[0]
+
+PRIMARY == journal     → personal Journals/<project>/  (always; SessionEnd-only)
+PRIMARY == tool        → personal Tools/      (always; cross-project by nature)
+PRIMARY == preference  → personal Notes/      (always; project: tag if scoped)
+PRIMARY ∈ {reference, findings, decision, learning}:
   project-vault enabled AND repo has matching folder
-                     → project-vault <folder>/
-  otherwise          → personal Notes/     (project: tag if scoped)
+                        → project-vault <folder>/
+  otherwise             → personal Notes/     (project: tag if scoped)
 ```
 
 Folder match is case-insensitive on basename, top-level + one level under `docs/`. Patterns: `decision → decisions/|adr/|decision-records/`; `learning → learnings/|lessons/`; `reference → references/`. `_project_docs.py match-type-folder <repo> --type <t>` returns the matched folder (exit 0) or nothing (exit 1).

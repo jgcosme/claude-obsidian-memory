@@ -18,7 +18,7 @@ if [ -n "$PROJECT_ROOT" ]; then
     PROJECT_VAULT_ARG="--project-vault $PROJECT_ROOT"
   fi
 fi
-python3 "${CLAUDE_PLUGIN_ROOT:-$(ls -d ~/.claude/plugins/cache/jgcosme-plugins/obsidian-memory/*/ 2>/dev/null | tail -1 | sed 's:/$::')}/scripts/audit.py" $PROJECT_VAULT_ARG
+python3 "${CLAUDE_PLUGIN_ROOT:-$(ls -td ~/.claude/plugins/cache/jgcosme-plugins/obsidian-memory/*/ 2>/dev/null | head -1 | sed 's:/$::')}/scripts/audit.py" $PROJECT_VAULT_ARG
 ```
 
 Group the script's output by category, highest-impact first (broken wikilinks > missing frontmatter > orphans > duplicate basenames). For each issue, propose the smallest fix. Auto-fixes aren't applied at this step — the user picks which to act on.

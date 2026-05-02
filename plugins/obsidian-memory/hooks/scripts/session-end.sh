@@ -46,13 +46,6 @@ else
   exit 0
 fi
 
-# ---------------------------------------------------------------------------
-# Recursion guard: if this IS itself a memory-review subprocess, exit immediately.
-# ---------------------------------------------------------------------------
-if [ -n "${CLAUDE_MEMORY_REVIEW:-}" ]; then
-  exit 0
-fi
-
 # Read event payload from stdin
 PAYLOAD=$(cat)
 TRANSCRIPT=$(echo "$PAYLOAD" | jq -r '.transcript_path // empty' 2>/dev/null || echo "")
@@ -81,13 +74,16 @@ if [ -z "$TRANSCRIPT" ] || [ ! -f "$TRANSCRIPT" ]; then
   exit 0
 fi
 
+# Resolve plugin root once — used for the slim helper, the review prompt's
+# script paths, and the backgrounded usage logger below.
+PLUGIN_ROOT_PATH="${CLAUDE_PLUGIN_ROOT:-}"
+
 # Slim the transcript for the reviewer: strip tool_use / tool_result blocks
 # and keep only user messages + assistant text + a one-line tool-use summary
 # per assistant turn. Cuts review token cost ~95% on real sessions because
 # tool_result bodies (file reads, command output, search results) dominate
 # transcript size and aren't signal for save-worthy detection.
 # OBSIDIAN_MEMORY_SLIM_TRANSCRIPT=false reverts to the raw transcript.
-PLUGIN_ROOT_PATH="${CLAUDE_PLUGIN_ROOT:-}"
 SLIM_HELPER="$PLUGIN_ROOT_PATH/scripts/_slim_transcript.py"
 SLIM_TRANSCRIPT=""
 if [ "${OBSIDIAN_MEMORY_SLIM_TRANSCRIPT:-true}" = "true" ] && [ -f "$SLIM_HELPER" ]; then
@@ -124,11 +120,15 @@ fi
 # for unbalanced quotes (apostrophes in the prompt text would otherwise trip
 # it). Placeholders are substituted with sed afterwards.
 # ---------------------------------------------------------------------------
-PLUGIN_ROOT_PATH="${CLAUDE_PLUGIN_ROOT:-}"
 
 # Precompute the vault-changes command and HEAD display so the prompt stays
 # free of shell conditionals. Single-quote vault/script paths to handle
 # spaces; vault paths don't contain single quotes in practice.
+#
+# Scope: personal vault only. Project-vault renames/deletes are NOT reconciled
+# here — the project-vault commits on the user's cadence, so reconciliation
+# would race with their workflow. Cross-corpus integrity is available via
+# /obsidian-memory:audit on demand.
 VAULT_HEAD_DISPLAY="${VAULT_HEAD:-(none)}"
 if [ -n "$VAULT_HEAD" ]; then
   VAULT_CHANGES_CMD="python3 '$PLUGIN_ROOT_PATH/scripts/_vault.py' --vault '$VAULT' vault-changes --base-sha $VAULT_HEAD"
@@ -147,21 +147,29 @@ Vault HEAD at session start: __VAULT_HEAD_DISPLAY__
 
 Do steps 1-3 first. Step 4 (the journal) is written last so its bullets can reference everything you wrote.
 
-1. PROACTIVE NOTES — capture moments in the transcript where information surfaces that is stable across sessions, useful in future sessions, and not derivable from the codebase or git history. Covers corrections, preferences, validated approaches, always / from now on / stop doing X rules, decisions and rationale, and novel facts (people, IDs, configs, channels, dashboards, endpoints). Skip if already covered (verify via `python3 __PLUGIN_ROOT__/scripts/_vault.py --vault __VAULT__ search --type <t> --keywords <k> --json`; extend a near-duplicate rather than creating a new note).
+1. PROACTIVE NOTES — capture moments in the transcript where information surfaces that is stable across sessions, useful in future sessions, and not derivable from the codebase or git history. Covers corrections, preferences, validated approaches, always / from now on / stop doing X rules, decisions and rationale, novel facts (people, IDs, configs, channels, dashboards, endpoints), AND the synthesis of any multi-source research the assistant did during the session (read 3+ docs, compared options, mapped a landscape — capture as `findings` so a future session doesn't redo the work). Skip if already covered (verify via `python3 __PLUGIN_ROOT__/scripts/_vault.py --vault __VAULT__ search --type <t> --keywords <k> --json`; extend a near-duplicate rather than creating a new note).
 
-   Pick the type first (one of: preference, reference, decision, learning, tool — never journal here, journal is step 4). Then route:
+   Type semantics — the canonical definitions live in __PLUGIN_ROOT__/templates/types.md. Read that file before classifying notes; it defines all seven types and the multi-type rules.
 
-     A. type == tool       → __VAULT__/Tools/<slug>.md
-     B. type == preference → __VAULT__/Notes/<slug>.md  (add `project: __PROJECT_NAME__` only if narrowly scoped)
-     C. type ∈ {reference, decision, learning}:
+=== TYPES.MD (canonical definitions) ===
+__TYPES_DOC__
+=== END TYPES.MD ===
+
+   Pick one or more types per note (never `journal` here — journal is step 4). Multi-type allowed: a note that genuinely spans axes can declare e.g. `[findings, decision]`; the first type drives routing.
+
+   Routing (PRIMARY = types[0]):
+
+     A. PRIMARY == tool       → __VAULT__/Tools/<slug>.md
+     B. PRIMARY == preference → __VAULT__/Notes/<slug>.md  (add `project: __PROJECT_NAME__` only if narrowly scoped)
+     C. PRIMARY ∈ {reference, findings, decision, learning}:
         1. If __PROJECT_DIR__ is registered + enabled in projects.json
            (check via `python3 __PLUGIN_ROOT__/scripts/_projects.py lookup __PROJECT_DIR__`)
-           AND has a folder matching the type
-           (check via `python3 __PLUGIN_ROOT__/scripts/_project_docs.py match-type-folder __PROJECT_DIR__ --type <type>`):
+           AND has a folder matching the primary type
+           (check via `python3 __PLUGIN_ROOT__/scripts/_project_docs.py match-type-folder __PROJECT_DIR__ --type <PRIMARY>`):
              → __PROJECT_DIR__/<matched-folder>/<slug>.md  (with project: from the registry)
         2. Otherwise → __VAULT__/Notes/<slug>.md  (with `project: __PROJECT_NAME__` if project-scoped)
 
-   Frontmatter on every new note: type, description, created (+ project when scoped). type ∈ {preference, reference, decision, learning, tool}.
+   Frontmatter on every new note: type, description, created (+ project when scoped). `type:` is either a single string (`type: decision`) or a YAML list (`type: [findings, decision]`).
 
    Always wrap the `description:` value in double quotes (e.g. `description: "one-line hook"`). Descriptions often contain `:`, `[[wikilinks]]`, or `[brackets]` — unquoted, these break YAML parsing. Escape any embedded `"` as `\"`. This rule also applies when you rewrite an existing note's `description` (step 2) or the journal's day-summary `description` (step 4).
 
@@ -212,16 +220,50 @@ OUTPUT sections (in order, omit when empty):
 No narrative outside these sections.
 PROMPT_EOF
 
-REVIEW_PROMPT=$(printf '%s' "$REVIEW_PROMPT_TMPL" | sed \
-  -e "s|__VAULT__|${VAULT}|g" \
-  -e "s|__TRANSCRIPT__|${TRANSCRIPT}|g" \
-  -e "s|__PROJECT_NAME__|${PROJECT_NAME}|g" \
-  -e "s|__PROJECT_DIR__|${PROJECT_DIR}|g" \
-  -e "s|__TODAY__|${TODAY}|g" \
-  -e "s|__NOW__|${NOW}|g" \
-  -e "s|__PLUGIN_ROOT__|${PLUGIN_ROOT_PATH}|g" \
-  -e "s|__VAULT_HEAD_DISPLAY__|${VAULT_HEAD_DISPLAY}|g" \
-  -e "s|__VAULT_CHANGES_CMD__|${VAULT_CHANGES_CMD}|g")
+# Load canonical type definitions for inlining into the prompt. The file
+# is expected at templates/types.md; if it's missing, fall back to a
+# brief notice so the rest of the review still runs.
+TYPES_DOC=""
+if [ -f "$PLUGIN_ROOT_PATH/templates/types.md" ]; then
+  TYPES_DOC=$(cat "$PLUGIN_ROOT_PATH/templates/types.md")
+else
+  TYPES_DOC="(types.md not found at $PLUGIN_ROOT_PATH/templates/types.md — using bare type names: preference, reference, findings, decision, learning, tool, journal)"
+fi
+
+# Substitute placeholders via Python so paths containing sed-special chars
+# (`|`, `&`, `\`) don't break the prompt. Values are passed via env to avoid
+# argv quoting issues; they're applied as literal string replacements.
+REVIEW_PROMPT=$(
+  TMPL="$REVIEW_PROMPT_TMPL" \
+  V_VAULT="$VAULT" \
+  V_TRANSCRIPT="$TRANSCRIPT" \
+  V_PROJECT_NAME="$PROJECT_NAME" \
+  V_PROJECT_DIR="$PROJECT_DIR" \
+  V_TODAY="$TODAY" \
+  V_NOW="$NOW" \
+  V_PLUGIN_ROOT="$PLUGIN_ROOT_PATH" \
+  V_VAULT_HEAD_DISPLAY="$VAULT_HEAD_DISPLAY" \
+  V_VAULT_CHANGES_CMD="$VAULT_CHANGES_CMD" \
+  V_TYPES_DOC="$TYPES_DOC" \
+  python3 -c '
+import os, sys
+out = os.environ["TMPL"]
+for ph, var in [
+    ("__VAULT__",              "V_VAULT"),
+    ("__TRANSCRIPT__",         "V_TRANSCRIPT"),
+    ("__PROJECT_NAME__",       "V_PROJECT_NAME"),
+    ("__PROJECT_DIR__",        "V_PROJECT_DIR"),
+    ("__TODAY__",              "V_TODAY"),
+    ("__NOW__",                "V_NOW"),
+    ("__PLUGIN_ROOT__",        "V_PLUGIN_ROOT"),
+    ("__VAULT_HEAD_DISPLAY__", "V_VAULT_HEAD_DISPLAY"),
+    ("__VAULT_CHANGES_CMD__",  "V_VAULT_CHANGES_CMD"),
+    ("__TYPES_DOC__",          "V_TYPES_DOC"),
+]:
+    out = out.replace(ph, os.environ.get(var, ""))
+sys.stdout.write(out)
+'
+)
 
 export REVIEW_PROMPT
 
@@ -229,7 +271,6 @@ export REVIEW_PROMPT
 # Background the review so the hook returns immediately. After review, autocommit
 # any vault changes (no push by default — controlled by AUTOPUSH).
 # ---------------------------------------------------------------------------
-PLUGIN_ROOT_PATH="${CLAUDE_PLUGIN_ROOT:-}"
 USAGE_LOGGER="$PLUGIN_ROOT_PATH/hooks/scripts/_usage_log.sh"
 
 nohup bash -c '
@@ -285,42 +326,50 @@ nohup bash -c '
     fi
   fi
 
-  if [ "$AUTOCOMMIT" = "true" ] && [ -d "$VAULT/.git" ]; then
-    cd "$VAULT" || exit 0
-    # Serialize git ops across overlapping sessions
-    LOCK_FD=9
-    LOCK_FILE="$VAULT/.git/.claude-memory.lock"
-    exec 9>"$LOCK_FILE" 2>/dev/null
-    if command -v flock >/dev/null 2>&1; then
-      flock -w 30 9 || { echo "[$(ts)] lock timeout, skipping commit" >> "$LOG"; exit 0; }
+  # Cleanup runs unconditionally at exit so it survives early returns from
+  # the autocommit block (e.g. flock timeout or `cd` failure).
+  cleanup() {
+    if [ -n "$SLIM_TRANSCRIPT" ] && [ -f "$SLIM_TRANSCRIPT" ]; then
+      rm -f "$SLIM_TRANSCRIPT"
     fi
-    if [ -n "$(git status --porcelain)" ]; then
-      NOW_TS=$(date "+%Y-%m-%d %H:%M")
-      git add -A
-      if git commit -m "session writes $NOW_TS ($PROJECT_NAME)" >> "$LOG" 2>&1; then
-        echo "[$(ts)] vault auto-committed" >> "$LOG"
-        if [ "$AUTOPUSH" = "true" ]; then
-          if git push >> "$LOG" 2>&1; then
-            echo "[$(ts)] vault auto-pushed" >> "$LOG"
+    if [ -n "$SAFE_SID" ] && [ -n "$SESSION_STATE_DIR" ]; then
+      rm -f "$SESSION_STATE_DIR/$SAFE_SID.vault_head" 2>/dev/null || true
+    fi
+  }
+  trap cleanup EXIT
+
+  if [ "$AUTOCOMMIT" = "true" ] && [ -d "$VAULT/.git" ]; then
+    if cd "$VAULT"; then
+      # Serialize git ops across overlapping sessions
+      LOCK_FILE="$VAULT/.git/.claude-memory.lock"
+      exec 9>"$LOCK_FILE" 2>/dev/null
+      proceed=1
+      if command -v flock >/dev/null 2>&1; then
+        flock -w 30 9 || { echo "[$(ts)] lock timeout, skipping commit" >> "$LOG"; proceed=0; }
+      fi
+      if [ "$proceed" = "1" ]; then
+        if [ -n "$(git status --porcelain)" ]; then
+          NOW_TS=$(date "+%Y-%m-%d %H:%M")
+          git add -A
+          if git commit -m "session writes $NOW_TS ($PROJECT_NAME)" >> "$LOG" 2>&1; then
+            echo "[$(ts)] vault auto-committed" >> "$LOG"
+            if [ "$AUTOPUSH" = "true" ]; then
+              if git push >> "$LOG" 2>&1; then
+                echo "[$(ts)] vault auto-pushed" >> "$LOG"
+              else
+                echo "[$(ts)] vault push failed" >> "$LOG"
+              fi
+            fi
           else
-            echo "[$(ts)] vault push failed" >> "$LOG"
+            echo "[$(ts)] vault commit failed" >> "$LOG"
           fi
+        else
+          echo "[$(ts)] vault clean — nothing to commit" >> "$LOG"
         fi
-      else
-        echo "[$(ts)] vault commit failed" >> "$LOG"
       fi
     else
-      echo "[$(ts)] vault clean — nothing to commit" >> "$LOG"
+      echo "[$(ts)] cd to vault failed — skipping commit" >> "$LOG"
     fi
-  fi
-
-  if [ -n "$SLIM_TRANSCRIPT" ] && [ -f "$SLIM_TRANSCRIPT" ]; then
-    rm -f "$SLIM_TRANSCRIPT"
-  fi
-
-  # Clean up per-session HEAD SHA files now that the review has consumed them.
-  if [ -n "$SAFE_SID" ] && [ -n "$SESSION_STATE_DIR" ]; then
-    rm -f "$SESSION_STATE_DIR/$SAFE_SID.vault_head" 2>/dev/null || true
   fi
 ' >/dev/null 2>&1 &
 

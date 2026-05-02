@@ -36,8 +36,15 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import re
 import sys
 from pathlib import Path
+
+# Project names land in filesystem paths (Journals/<project>/<date>.md). Reject
+# anything that isn't safe as a single path component — no separators, no `..`,
+# no leading dot/dash. Generous on the alphabet (lowercase recommended but mixed
+# case allowed) and length so legitimate repo basenames pass.
+_PROJECT_NAME_RE = re.compile(r"^[A-Za-z0-9_][A-Za-z0-9._-]{0,63}$")
 
 
 def projects_path() -> Path:
@@ -94,7 +101,17 @@ def lookup(path: str) -> dict:
 
 
 def register(path: str, *, enabled: bool, project: str) -> dict:
-    """Insert or update the entry for path. Returns the new entry."""
+    """Insert or update the entry for path. Returns the new entry.
+
+    `project` must be a safe path-component string — it gets dropped into
+    Journals/<project>/<date>.md by SessionEnd, so unsafe values would
+    let an attacker (or a typo) escape the vault root.
+    """
+    if not _PROJECT_NAME_RE.match(project):
+        raise ValueError(
+            f"invalid project name {project!r}: must match {_PROJECT_NAME_RE.pattern} "
+            "(safe single path component, ≤64 chars, no separators, no leading dot/dash)"
+        )
     repo_path = _resolve_repo(path)
     rp = projects_path()
     data = _load(rp)
@@ -148,7 +165,11 @@ def _cmd_lookup(args: argparse.Namespace) -> int:
 
 
 def _cmd_register(args: argparse.Namespace) -> int:
-    result = register(args.path, enabled=args.enabled, project=args.project)
+    try:
+        result = register(args.path, enabled=args.enabled, project=args.project)
+    except ValueError as e:
+        print(f"error: {e}", file=sys.stderr)
+        return 2
     if args.json:
         print(json.dumps(result, indent=2))
     else:

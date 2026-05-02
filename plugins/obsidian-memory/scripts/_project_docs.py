@@ -78,6 +78,22 @@ def _is_boilerplate(rel_path: Path) -> bool:
     # can't distinguish them — they have to be excluded by path.
     if "fixtures" in parts:
         return True
+    # Drop Claude Code plugin metadata (SKILL.md inside skills/, slash-command
+    # markdown inside commands/, marketplace.json's .claude-plugin/ dir).
+    # These files carry skill/command frontmatter, not plugin memory
+    # frontmatter, so they pollute project-vault audits with false-positive
+    # "missing frontmatter" hits. Any-segment match (not just top-level) so
+    # nested plugins/<name>/skills/<skill>/SKILL.md are also caught.
+    if ".claude-plugin" in parts:
+        return True
+    if "skills" in parts and rel_path.name == "SKILL.md":
+        return True
+    if "commands" in parts and rel_path.suffix.lower() == ".md":
+        # Heuristic: only skip when there's also a sibling .claude-plugin/
+        # or plugins/ marker on the path, to avoid eating a legitimate
+        # docs/commands/ directory in unrelated projects.
+        if any(p in parts for p in ("plugins", ".claude-plugin", ".claude")):
+            return True
     name_upper = rel_path.name.upper()
     for prefix in BOILERPLATE_PREFIXES:
         if name_upper.startswith(prefix):
@@ -91,6 +107,7 @@ def _is_boilerplate(rel_path: Path) -> bool:
 # route to the personal vault.
 TYPE_FOLDER_PATTERNS: dict[str, tuple[str, ...]] = {
     "decision": ("decisions", "adr", "decision-records"),
+    "findings": ("findings", "research"),
     "learning": ("learnings", "lessons"),
     "reference": ("references",),
 }
@@ -203,7 +220,7 @@ def main(argv: list[str] | None = None) -> int:
                         help="find a repo folder matching a memory type (decision/learning/reference)")
     mp.add_argument("project_path", help="path to the project's git repo")
     mp.add_argument("--type", required=True,
-                    choices=("decision", "learning", "reference", "preference", "tool", "journal"),
+                    choices=("decision", "findings", "learning", "reference", "preference", "tool", "journal"),
                     help="memory type to match")
     mp.add_argument("--json", action="store_true", help="emit JSON result")
     mp.set_defaults(func=_cmd_match_type_folder)

@@ -5,7 +5,7 @@ description: Show this session's obsidian-memory plugin token consumption
 Run the plugin usage script:
 
 ```bash
-bash "${CLAUDE_PLUGIN_ROOT:-$(ls -d ~/.claude/plugins/cache/jgcosme-plugins/obsidian-memory/*/ 2>/dev/null | tail -1 | sed 's:/$::')}/scripts/usage.sh"
+bash "${CLAUDE_PLUGIN_ROOT:-$(ls -td ~/.claude/plugins/cache/jgcosme-plugins/obsidian-memory/*/ 2>/dev/null | head -1 | sed 's:/$::')}/scripts/usage.sh"
 ```
 
 The script lists each event kind with an `[injected]` or `[api]` tag, then totals at the bottom split by category. Tokens meter against the user's Claude rate-limit pool, not their wallet — subscriptions cover usage within rate limits.

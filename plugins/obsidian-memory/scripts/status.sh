@@ -71,7 +71,12 @@ if [ -d "$VAULT" ]; then
       [ -n "$remote" ] && ok "git remote: $remote" || warn "autopush=true but no 'origin' remote"
     fi
   else
-    warn "not a git repo (auto-commit will no-op)"
+    if [ "$AUTOCOMMIT" = "true" ]; then
+      warn "not a git repo, but autocommit=true — SessionEnd will silently no-op"
+      echo "         to enable: cd \"$VAULT\" && git init -b main && git add -A && git commit -m 'Initial commit'"
+    else
+      warn "not a git repo (auto-commit disabled, so this is fine)"
+    fi
   fi
 else
   fail "vault not found at $VAULT — run setup.sh"
