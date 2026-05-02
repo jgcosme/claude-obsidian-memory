@@ -118,7 +118,7 @@ Seven types — `findings` captures multi-source research synthesis (read severa
 
 `type` lives in frontmatter; the auto-overview groups by `type:` rather than by folder, so the layout stays browsable while staying flat.
 
-Canonical type semantics live in [`plugins/obsidian-memory/templates/types.md`](./plugins/obsidian-memory/templates/types.md) — the single source of truth used by `save-memory`, the SessionEnd review, and `init_project_vault.py`.
+Canonical type semantics live in [`templates/types.md`](./templates/types.md) — the single source of truth used by `save-memory`, the SessionEnd review, and `init_project_vault.py`.
 
 If you already have your own Obsidian vault, the plugin's vault sits beside it as a separate top-level vault. Open whichever one you want in Obsidian.app — the plugin only reads/writes inside its own vault.
 

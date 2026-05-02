@@ -37,7 +37,7 @@ type: [findings, decision]
 
 The first type drives routing (which folder the note lands in). The plugin builds Claude's auto-overview by walking these frontmatter blocks each session — multi-type notes appear under each of their types so search by `--type X` finds them no matter which axis you filter on.
 
-Canonical type definitions live in `plugins/obsidian-memory/templates/types.md` (the single source of truth for what each type means and when to pick which).
+Canonical type definitions live in `templates/types.md` (the single source of truth for what each type means and when to pick which).
 
 ## Federated project-vaults
 
