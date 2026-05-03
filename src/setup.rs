@@ -3,7 +3,7 @@
 //! Idempotently scaffolds:
 //!   - `~/.config/obsidian-memory/` (config.env + secrets.env)
 //!   - The vault dir + Tools/Journals/Notes scaffolding
-//!   - Templates rendered with `__TODAY__` / `__VAULT_PATH__` substituted
+//!   - Templates rendered with `__NOW__` / `__TODAY__` / `__VAULT_PATH__` substituted
 //!   - Statusline wrapper + Claude Code settings.json patch
 //!   - Obsidian.app registry entry (skipped if Obsidian.app is running)
 //!
@@ -37,6 +37,7 @@ pub fn run() -> Result<i32> {
 
     let vault_path = vault_display_path();
     let today = Local::now().format("%Y-%m-%d").to_string();
+    let now = crate::vault::timestamps::now_iso8601_local();
 
     println!("obsidian-memory setup");
     println!("  plugin root: {}", plugin_root.display());
@@ -126,7 +127,10 @@ pub fn run() -> Result<i32> {
             std::fs::create_dir_all(parent)?;
         }
         let content = std::fs::read_to_string(src)?;
-        let rendered = content.replace("__TODAY__", &today).replace("__VAULT_PATH__", &vault_path);
+        let rendered = content
+            .replace("__NOW__", &now)
+            .replace("__TODAY__", &today)
+            .replace("__VAULT_PATH__", &vault_path);
         std::fs::write(&dst, rendered)?;
         println!("[+] {}", dst.display());
     }

@@ -266,7 +266,7 @@ fn build_system_prompt(overview: &str, path_cap: usize) -> String {
     format!(
 r##"Retrieval gate for an Obsidian vault. Default to {{}}; inject only when a specific note demonstrably helps. Output ONE JSON object on a single line, no prose. `read` paths are absolute filesystem paths copied verbatim from the overview below.
 
-{{"read":["/abs/path/to/note.md"], "search":[{{"type":"...","keywords":"...","path_prefix":"...","created_after":"YYYY-MM-DD","created_before":"YYYY-MM-DD"}}]}}
+{{"read":["/abs/path/to/note.md"], "search":[{{"type":"...","keywords":"...","path_prefix":"...","created_after":"YYYY-MM-DD","created_before":"YYYY-MM-DD","updated_after":"YYYY-MM-DD","updated_before":"YYYY-MM-DD"}}]}}
 
 Both optional. Cap {path_cap} paths.
 
@@ -381,6 +381,8 @@ fn select_paths(gate_text: &str, vault: &Path, cap: usize) -> Option<Vec<String>
                 keywords: qobj.get("keywords").and_then(|v| v.as_str()),
                 created_after: qobj.get("created_after").and_then(|v| v.as_str()),
                 created_before: qobj.get("created_before").and_then(|v| v.as_str()),
+                updated_after: qobj.get("updated_after").and_then(|v| v.as_str()),
+                updated_before: qobj.get("updated_before").and_then(|v| v.as_str()),
                 limit: cap,
                 project_vault: None,
             };

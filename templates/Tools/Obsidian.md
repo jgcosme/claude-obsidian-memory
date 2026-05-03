@@ -1,7 +1,9 @@
 ---
 type: tool
 description: Obsidian CLI commands, vault path, frontmatter search syntax
-created: __TODAY__
+created_at: __NOW__
+updated_at: __NOW__
+updated_by: init
 ---
 
 # Obsidian
@@ -33,15 +35,15 @@ created: __TODAY__
 
 **Syntax:**
 - `[type:learning]` — notes where `type: learning` in frontmatter
-- `[created:2026-04-27]` — notes with that exact `created` value
-- `[type:learning] [created:2026-04-27]` — AND-combined frontmatter filters
+- `[created_at:2026-04-27]` — notes whose `created_at` value starts with that date (Obsidian matches the field as a string; ISO 8601 datetimes start with the date so a date-prefix query works)
+- `[type:learning] [created_at:2026-04-27]` — AND-combined frontmatter filters
 - `path:Projects` — limit to a folder
 - `path:Projects [type:learning]` — combine path + frontmatter
 
 **Example — yesterday's learnings across all projects:**
 ```bash
 YESTERDAY=$(date -v-1d +%Y-%m-%d)
-obsidian search query="path:Projects [type:learning] [created:$YESTERDAY]" format=json
+obsidian search query="path:Projects [type:learning] [created_at:$YESTERDAY]" format=json
 ```
 
 **Related commands:**
@@ -50,5 +52,5 @@ obsidian search query="path:Projects [type:learning] [created:$YESTERDAY]" forma
 - `obsidian property:set name=<key> value=<v> type=date path=<file>` — set a field
 
 **Limitations:**
-- No native range syntax (e.g., `created:>=2026-04-01`). For ranges, loop dates and union results, or fall back to shell `grep` over frontmatter blocks.
+- No native range syntax (e.g., `created_at:>=2026-04-01`). For ranges, loop dates and union results, or use the plugin's `obsidian-memory vault search --created-after / --created-before` (which is datetime-aware).
 - Search works only on frontmatter that's been indexed by Obsidian — Obsidian.app must be running, and a `reload` may be needed after writing many files programmatically.

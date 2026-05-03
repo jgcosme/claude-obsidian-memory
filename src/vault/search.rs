@@ -7,11 +7,12 @@
 use std::path::{Path, PathBuf};
 
 use anyhow::Result;
-use chrono::NaiveDate;
+use chrono::{DateTime, FixedOffset};
 use serde::Serialize;
 
 use crate::project_docs;
 use crate::vault::frontmatter::{note_types, read_note};
+use crate::vault::timestamps;
 use crate::vault::walk::collect_md_files;
 
 #[derive(Debug, Default, Clone, Copy)]
@@ -21,6 +22,8 @@ pub struct SearchOpts<'a> {
     pub keywords: Option<&'a str>,
     pub created_after: Option<&'a str>,
     pub created_before: Option<&'a str>,
+    pub updated_after: Option<&'a str>,
+    pub updated_before: Option<&'a str>,
     pub limit: usize,
     pub project_vault: Option<&'a Path>,
 }
@@ -34,12 +37,16 @@ pub struct SearchHit {
     pub types: Vec<String>,
     pub description: String,
     pub project: String,
-    pub created: String,
+    pub created_at: String,
+    pub updated_at: String,
+    pub updated_by: String,
 }
 
 pub fn search(vault: &Path, opts: SearchOpts<'_>) -> Result<Vec<SearchHit>> {
-    let after = opts.created_after.and_then(parse_date);
-    let before = opts.created_before.and_then(parse_date);
+    let created_after = opts.created_after.and_then(timestamps::parse_filter);
+    let created_before = opts.created_before.and_then(timestamps::parse_filter);
+    let updated_after = opts.updated_after.and_then(timestamps::parse_filter);
+    let updated_before = opts.updated_before.and_then(timestamps::parse_filter);
 
     let kw_terms: Vec<String> = opts
         .keywords
@@ -53,6 +60,13 @@ pub fn search(vault: &Path, opts: SearchOpts<'_>) -> Result<Vec<SearchHit>> {
 
     let mut hits: Vec<(i64, SearchHit)> = Vec::new();
 
+    let bounds = TimeBounds {
+        created_after: created_after.as_ref(),
+        created_before: created_before.as_ref(),
+        updated_after: updated_after.as_ref(),
+        updated_before: updated_before.as_ref(),
+    };
+
     score_corpus(
         "personal",
         vault,
@@ -60,8 +74,7 @@ pub fn search(vault: &Path, opts: SearchOpts<'_>) -> Result<Vec<SearchHit>> {
         opts.type_,
         opts.path_prefix,
         &kw_terms,
-        after.as_ref(),
-        before.as_ref(),
+        bounds,
         &mut hits,
     );
 
@@ -74,8 +87,7 @@ pub fn search(vault: &Path, opts: SearchOpts<'_>) -> Result<Vec<SearchHit>> {
             opts.type_,
             opts.path_prefix,
             &kw_terms,
-            after.as_ref(),
-            before.as_ref(),
+            bounds,
             &mut hits,
         );
     }
@@ -90,6 +102,14 @@ pub fn search(vault: &Path, opts: SearchOpts<'_>) -> Result<Vec<SearchHit>> {
     Ok(hits.into_iter().take(opts.limit).map(|(_, h)| h).collect())
 }
 
+#[derive(Debug, Default, Clone, Copy)]
+struct TimeBounds<'a> {
+    created_after: Option<&'a DateTime<FixedOffset>>,
+    created_before: Option<&'a DateTime<FixedOffset>>,
+    updated_after: Option<&'a DateTime<FixedOffset>>,
+    updated_before: Option<&'a DateTime<FixedOffset>>,
+}
+
 #[allow(clippy::too_many_arguments)]
 fn score_corpus(
     corpus: &str,
@@ -98,8 +118,7 @@ fn score_corpus(
     type_: Option<&str>,
     path_prefix: Option<&str>,
     kw_terms: &[String],
-    after: Option<&NaiveDate>,
-    before: Option<&NaiveDate>,
+    bounds: TimeBounds<'_>,
     hits: &mut Vec<(i64, SearchHit)>,
 ) {
     for f in files {
@@ -126,11 +145,26 @@ fn score_corpus(
             }
         }
 
-        if after.is_some() || before.is_some() {
-            let created_str = fm_ref.and_then(|m| m.get("created")).map(|s| s.as_str()).unwrap_or("");
-            let Some(d) = parse_date(created_str) else { continue };
-            if let Some(a) = after { if &d < a { continue; } }
-            if let Some(b) = before { if &d > b { continue; } }
+        if bounds.created_after.is_some() || bounds.created_before.is_some() {
+            // Prefer `created_at`; fall back to legacy `created` so unmigrated
+            // notes still match a date filter.
+            let raw = fm_ref
+                .and_then(|m| m.get("created_at").or_else(|| m.get("created")))
+                .map(|s| s.as_str())
+                .unwrap_or("");
+            let Some(d) = timestamps::parse_value(raw) else { continue };
+            if let Some(a) = bounds.created_after { if &d < a { continue; } }
+            if let Some(b) = bounds.created_before { if &d > b { continue; } }
+        }
+
+        if bounds.updated_after.is_some() || bounds.updated_before.is_some() {
+            let raw = fm_ref
+                .and_then(|m| m.get("updated_at"))
+                .map(|s| s.as_str())
+                .unwrap_or("");
+            let Some(d) = timestamps::parse_value(raw) else { continue };
+            if let Some(a) = bounds.updated_after { if &d < a { continue; } }
+            if let Some(b) = bounds.updated_before { if &d > b { continue; } }
         }
 
         let score: i64 = if !kw_terms.is_empty() {
@@ -170,7 +204,12 @@ fn score_corpus(
 
         let description = fm_ref.and_then(|m| m.get("description")).cloned().unwrap_or_default();
         let project = fm_ref.and_then(|m| m.get("project")).cloned().unwrap_or_default();
-        let created = fm_ref.and_then(|m| m.get("created")).cloned().unwrap_or_default();
+        let created_at = fm_ref
+            .and_then(|m| m.get("created_at").or_else(|| m.get("created")))
+            .cloned()
+            .unwrap_or_default();
+        let updated_at = fm_ref.and_then(|m| m.get("updated_at")).cloned().unwrap_or_default();
+        let updated_by = fm_ref.and_then(|m| m.get("updated_by")).cloned().unwrap_or_default();
 
         hits.push((
             score,
@@ -181,17 +220,14 @@ fn score_corpus(
                 types,
                 description,
                 project,
-                created,
+                created_at,
+                updated_at,
+                updated_by,
             },
         ));
     }
 }
 
-pub fn parse_date(s: &str) -> Option<NaiveDate> {
-    let s = s.trim();
-    if s.is_empty() { return None; }
-    NaiveDate::parse_from_str(s, "%Y-%m-%d").ok()
-}
 
 /// Count non-overlapping occurrences of `needle` in `haystack`.
 /// Matches Python's `str.count(sub)`.

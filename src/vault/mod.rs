@@ -4,6 +4,7 @@ pub mod changes;
 pub mod frontmatter;
 pub mod overview;
 pub mod search;
+pub mod timestamps;
 pub mod walk;
 pub mod wikilinks;
 
@@ -42,6 +43,8 @@ pub fn run(args: VaultArgs) -> Result<i32> {
                     keywords: s.keywords.as_deref(),
                     created_after: s.created_after.as_deref(),
                     created_before: s.created_before.as_deref(),
+                    updated_after: s.updated_after.as_deref(),
+                    updated_before: s.updated_before.as_deref(),
                     limit: s.limit,
                     project_vault: project_vault.as_deref(),
                 },
