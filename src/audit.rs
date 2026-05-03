@@ -369,10 +369,8 @@ fn migrate_corpus(root: &Path, files: &[PathBuf]) -> usize {
         // the YAML well-formed.
         let new_block = format!("---\n{new_inner}\n---\n");
         let new_text = format!("{new_block}{body}");
-        if new_text != text {
-            if std::fs::write(f, new_text.as_bytes()).is_ok() {
-                written += 1;
-            }
+        if new_text != text && std::fs::write(f, new_text.as_bytes()).is_ok() {
+            written += 1;
         }
     }
     written
