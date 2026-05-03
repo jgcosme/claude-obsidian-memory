@@ -3,8 +3,9 @@
 #
 # Idempotently downloads the matching prebuilt obsidian-memory binary from
 # this plugin's GitHub Releases into <plugin-root>/bin/obsidian-memory.
-# Detects platform via `uname -s -m`; falls through with a clear error if
-# the platform isn't covered by the release matrix.
+# Detects platform via `uname -s -m`; falls back to a local `cargo build
+# --release` if the platform isn't covered or the GH download fails (e.g.,
+# release not yet published). Final fallback is a clear error.
 #
 # Invoked lazily by bin/run on first hook fire. Also safe to run by hand:
 #   bash <plugin-root>/bin/install.sh
@@ -42,19 +43,33 @@ if [ -x "$TARGET" ]; then
   fi
 fi
 
+# --- local build fallback (used when GH download is unavailable or the
+#     platform isn't in the prebuilt matrix). Returns 0 on success. ---
+build_from_source() {
+  command -v cargo >/dev/null 2>&1 || return 1
+  [ -f "$PLUGIN_ROOT/Cargo.toml" ] || return 1
+  echo "[install] building from source with cargo (this can take ~30s)…" >&2
+  ( cd "$PLUGIN_ROOT" && cargo build --release ) >&2 || return 1
+  local built="$PLUGIN_ROOT/target/release/obsidian-memory"
+  [ -x "$built" ] || return 1
+  mkdir -p "$PLUGIN_ROOT/bin"
+  cp "$built" "$TARGET"
+  chmod +x "$TARGET"
+  echo "[install] built obsidian-memory v${VERSION} → $TARGET" >&2
+  return 0
+}
+
 # --- detect platform ---
 OS=$(uname -s)
 ARCH=$(uname -m)
 case "$OS-$ARCH" in
   Darwin-arm64)        PLATFORM="aarch64-apple-darwin" ;;
-  Darwin-x86_64)       PLATFORM="x86_64-apple-darwin" ;;
   Linux-x86_64)        PLATFORM="x86_64-unknown-linux-gnu" ;;
-  Linux-aarch64)       PLATFORM="aarch64-unknown-linux-gnu" ;;
-  Linux-arm64)         PLATFORM="aarch64-unknown-linux-gnu" ;;
   *)
-    echo "[install] unsupported platform: $OS-$ARCH" >&2
-    echo "[install] supported: Darwin-arm64, Darwin-x86_64, Linux-x86_64, Linux-aarch64" >&2
-    echo "[install] fallback: build from source via 'cargo build --release' in $PLUGIN_ROOT" >&2
+    echo "[install] no prebuilt for $OS-$ARCH; attempting build from source" >&2
+    if build_from_source; then exit 0; fi
+    echo "[install] prebuilt tiers: Darwin-arm64, Linux-x86_64" >&2
+    echo "[install] for other platforms, install Rust (https://rustup.rs) and re-run" >&2
     exit 1
     ;;
 esac
@@ -78,7 +93,8 @@ trap 'rm -rf "$TMP"' EXIT
 echo "[install] downloading ${TARBALL}…" >&2
 if ! fetch "$BASE_URL/$TARBALL" "$TMP/$TARBALL"; then
   echo "[install] failed to download $BASE_URL/$TARBALL" >&2
-  echo "[install] check that the release exists, then re-run." >&2
+  if build_from_source; then exit 0; fi
+  echo "[install] check that the release exists, or install Rust (https://rustup.rs) for build-from-source fallback" >&2
   exit 1
 fi
 

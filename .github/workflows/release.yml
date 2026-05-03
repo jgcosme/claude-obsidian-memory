@@ -1,9 +1,10 @@
 name: release
 
-# Cross-build matrix that produces tarballs for the four target platforms the
-# plugin needs to support. Triggered on tag push (`vX.Y.Z`); the install script
-# downloads the matching asset and falls back to `cargo build --release` if no
-# match is found (handles unexpected platforms without breaking install).
+# Cross-build matrix for the two prebuilt-tier platforms (macOS arm64 + Linux
+# x86_64). Triggered on tag push (`vX.Y.Z`); the install script downloads the
+# matching asset, and falls back to a local `cargo build --release` for any
+# other platform — including Intel Macs and arm64 Linux — so dropping a tier
+# doesn't break those users, it just shifts them to build-from-source.
 
 on:
   push:
@@ -19,9 +20,7 @@ jobs:
       matrix:
         include:
           - { os: macos-14,     target: aarch64-apple-darwin }
-          - { os: macos-13,     target: x86_64-apple-darwin }
           - { os: ubuntu-22.04, target: x86_64-unknown-linux-gnu }
-          - { os: ubuntu-22.04, target: aarch64-unknown-linux-gnu, cross: true }
 
     steps:
       - uses: actions/checkout@v4
@@ -36,17 +35,8 @@ jobs:
         with:
           key: ${{ matrix.target }}
 
-      - name: Install cross (linux aarch64 only)
-        if: matrix.cross
-        run: cargo install cross --locked
-
-      - name: Build (native)
-        if: ${{ !matrix.cross }}
+      - name: Build
         run: cargo build --release --target ${{ matrix.target }}
-
-      - name: Build (cross)
-        if: matrix.cross
-        run: cross build --release --target ${{ matrix.target }}
 
       - name: Package
         shell: bash
