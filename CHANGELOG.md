@@ -1,5 +1,11 @@
 # Changelog
 
+## v2.1.3 — Slimmer journal entries
+
+- **`session_end.rs` review prompt** — step 4 (journal) rewritten to drop defensive scaffolding. No more `Vault writes:` / `Integrity:` cataloguing bullets, no path-citation requirement, no all-clear integrity narration. Bullets are prose covering work / decisions / corrections / unresolved threads — up to 6, fewer is fine.
+- **No-op skip** — sessions that produced nothing narrative-worthy (e.g. `/clear` → `/exit`, recap-only Q&A) skip step 4 entirely. No file created, no `## Session HH:MM` block appended, no frontmatter touched. Vault writes and integrity findings still flow to the stdout OUTPUT sections for the audit trail.
+- **`.claude-plugin/plugin.json`** — version field catches up to 2.1.3 (it had drifted to 2.1.1 since the v2.1.2 release missed the manifest bump).
+
 ## v2.1.2 — Fix plugin root display in status
 
 - **`bin/run`** — exports `CLAUDE_PLUGIN_ROOT` before exec so the binary always reports the path it was launched from, not a self-derived guess.

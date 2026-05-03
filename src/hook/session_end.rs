@@ -265,19 +265,16 @@ Do steps 1-3 first. Step 4 (the journal) is written last so its bullets can refe
 
    Auto-fix unambiguous issues (description drift, backlink-rename). List ambiguous and non-fixable items in their dedicated sections.
 
-4. JOURNAL — always, written LAST.
-   Path: {vault}/Journals/{project_name}/{today}.md
+4. JOURNAL — written LAST, only when the session produced something narrative-worthy.
+   Path: {vault}/Journals/{project_name}/{today}.md (one file per project per day; `Write` creates parent dirs).
 
-   Journals are scoped one-file-per-project-per-day: the directory `{project_name}/` segregates this project's day from any other project's day. Use the `Write` tool — it creates parent directories automatically.
+   Skip entirely for no-op sessions (e.g. `/clear` → `/exit`, recap-only Q&A, or nothing left to say after steps 1-3).
 
-   New file: frontmatter (type=journal, description=<one-line day summary>, project={project_name}, created_at=<now ISO 8601 with offset, e.g. {today}T{now}±HH:MM>, created_by=hook, updated_at=<same>, updated_by=hook) + "## Session {now}" + 3-6 bullets covering work, decisions, learnings.
+   New file: frontmatter (type=journal, description=<one-line day summary>, project={project_name}, created_at=<now ISO 8601 with offset>, created_by=hook, updated_at=<same>, updated_by=hook) + "## Session {now}" + bullets.
 
-   Existing file: append a "## Session {now}" section. Do not edit any prior content (earlier sessions today, earlier days). You MAY (and should) rewrite the frontmatter `description` to summarize the full day now that more sessions exist; whenever you touch frontmatter, bump `updated_at` and set `updated_by: hook`.
+   Existing file: append "## Session {now}" — do not edit prior sessions. Rewrite the frontmatter `description` to cover the full day; bump `updated_at` and set `updated_by: hook` whenever frontmatter changes.
 
-   Each bullet that describes a write must include the path:
-   - Vault writes (steps 1-2) → vault-relative path.
-   - Project-vault writes (step 1, route C.1) → repo-relative path inside {project_dir}.
-   The journal is the cross-session anchor; paths in bullets are how future sessions find the work.
+   Bullets are prose, up to 6. The journal is a diary, not a manifest: cover substantive work, decisions, corrections, and unresolved threads so a future session can pick up where this one stopped.
 
 OUTPUT sections (in order, omit when empty):
   ## Vault writes              (paths created/appended in the personal vault)
