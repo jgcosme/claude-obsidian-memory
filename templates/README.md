@@ -2,6 +2,7 @@
 type: reference
 description: "Obsidian Memory vault README — how Claude's persistent memory is organized"
 created_at: __NOW__
+created_by: init
 updated_at: __NOW__
 updated_by: init
 ---
@@ -27,6 +28,7 @@ Every note (except README files) has YAML frontmatter:
 type: preference | reference | findings | decision | learning | tool | journal
 description: "one-line hook"
 created_at: 2026-05-03T22:30:00+08:00     # ISO 8601 with local offset
+created_by: skill | hook | audit | init   # the actor that originally wrote (absent on legacy notes)
 updated_at: 2026-05-03T22:30:00+08:00     # bumped on each plugin-driven write
 updated_by: skill | hook | audit | init   # the actor that wrote last
 project: <project-name>                    # only when project-scoped
