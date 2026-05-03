@@ -16,4 +16,5 @@ if [ ! -x "$BIN" ]; then
   fi
 fi
 
+export CLAUDE_PLUGIN_ROOT="${CLAUDE_PLUGIN_ROOT:-$PLUGIN_ROOT}"
 exec "$BIN" "$@"

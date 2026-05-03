@@ -1,5 +1,10 @@
 # Changelog
 
+## v2.1.2 — Fix plugin root display in status
+
+- **`bin/run`** — exports `CLAUDE_PLUGIN_ROOT` before exec so the binary always reports the path it was launched from, not a self-derived guess.
+- **`commands/*.md`** — replaced `ls -td | head -1` with `ls -d | sort -V | tail -1` so the highest semver version is selected when multiple versions share the same mtime.
+
 ## v2.1.1 — Actor enum validation + save-memory tightening
 
 Patch release fixing one out-of-enum drift and hardening the writer + audit so it can't recur silently.

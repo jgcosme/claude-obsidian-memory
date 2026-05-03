@@ -7,7 +7,7 @@ Arguments: $ARGUMENTS
 Operate on `~/.config/obsidian-memory/projects.json` via the binary's `projects` and `init-project` subcommands. Resolve the binary path once:
 
 ```bash
-PLUGIN_RUN="${CLAUDE_PLUGIN_ROOT:-$(ls -td ~/.claude/plugins/cache/jgcosme-plugins/obsidian-memory/*/ 2>/dev/null | head -1 | sed 's:/$::')}/bin/run"
+PLUGIN_RUN="${CLAUDE_PLUGIN_ROOT:-$(ls -d ~/.claude/plugins/cache/jgcosme-plugins/obsidian-memory/*/ 2>/dev/null | sort -V | tail -1 | sed 's:/$::')}/bin/run"
 ```
 
 ## Parsing

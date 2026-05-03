@@ -11,7 +11,7 @@ Run the audit script. Includes the current project's project-vault if registered
 ```bash
 PROJECT_DIR="${CLAUDE_PROJECT_DIR:-$PWD}"
 PROJECT_ROOT=$(git -C "$PROJECT_DIR" rev-parse --show-toplevel 2>/dev/null || true)
-PLUGIN_RUN="${CLAUDE_PLUGIN_ROOT:-$(ls -td ~/.claude/plugins/cache/jgcosme-plugins/obsidian-memory/*/ 2>/dev/null | head -1 | sed 's:/$::')}/bin/run"
+PLUGIN_RUN="${CLAUDE_PLUGIN_ROOT:-$(ls -d ~/.claude/plugins/cache/jgcosme-plugins/obsidian-memory/*/ 2>/dev/null | sort -V | tail -1 | sed 's:/$::')}/bin/run"
 PROJECT_VAULT_ARG=""
 if [ -n "$PROJECT_ROOT" ]; then
   STATUS=$("$PLUGIN_RUN" projects lookup "$PROJECT_ROOT" 2>/dev/null || echo "")
