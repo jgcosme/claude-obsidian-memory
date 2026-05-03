@@ -1,10 +1,15 @@
 //! Full Obsidian vault integrity audit — port of scripts/audit.py.
 //!
 //! Reports:
-//!   - Frontmatter completeness (type, description, created; + project for project-vault)
+//!   - Frontmatter completeness (type, description, created_at; + project for project-vault)
 //!   - Broken wikilinks (target file not found)
 //!   - Orphan notes (no incoming wikilink, excluding README.md)
 //!   - Duplicate basenames (bare wikilinks become ambiguous)
+//!
+//! With `--fix-frontmatter`, migrates legacy `created:` (date-only) to
+//! `created_at:` (ISO 8601 with local offset, sourced from each note's git
+//! first-commit timestamp; falls back to file mtime), and adds
+//! `updated_at` + `updated_by: audit` when missing.
 //!
 //! Known divergence from Python: the optional `pyyaml` deep-validation pass
 //! is not ported. Python only runs it when pyyaml happens to be installed,
@@ -13,9 +18,10 @@
 
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
+use std::process::Command;
 
 use anyhow::Result;
-use chrono::Local;
+use chrono::{DateTime, Local};
 use once_cell::sync::Lazy;
 use regex::Regex;
 use serde::Serialize;
@@ -25,6 +31,7 @@ use crate::project_docs::enumerate_project_docs;
 use crate::vault::frontmatter::{
     FRONTMATTER_RE, VALID_TYPES, note_types, parse_frontmatter,
 };
+use crate::vault::timestamps;
 use crate::vault::walk::{absolute, collect_md_files, expand_user, resolve_vault};
 
 static WIKILINK_RE: Lazy<Regex> = Lazy::new(|| Regex::new(r"\[\[([^\]]+)\]\]").expect("wikilink regex"));
@@ -72,10 +79,17 @@ pub fn run(args: AuditArgs) -> Result<i32> {
     let has_project_vault = args.project_vault.is_some();
     let mut reports: Vec<CorpusReport> = Vec::new();
 
+    let personal_files = collect_md_files(&vault);
+    if args.fix_frontmatter {
+        let n = migrate_corpus(&vault, &personal_files);
+        if n > 0 {
+            eprintln!("[audit --fix-frontmatter] migrated {n} note(s) in {}", vault.display());
+        }
+    }
     reports.push(audit_corpus(
         if has_project_vault { "personal" } else { "" },
         &vault,
-        &collect_md_files(&vault),
+        &personal_files,
         false,
     ));
 
@@ -85,6 +99,13 @@ pub fn run(args: AuditArgs) -> Result<i32> {
             eprintln!("project-vault not found at: {}", project_root.display());
             return Ok(1);
         }
+        let project_files = enumerate_project_docs(&project_root);
+        if args.fix_frontmatter {
+            let n = migrate_corpus(&project_root, &project_files);
+            if n > 0 {
+                eprintln!("[audit --fix-frontmatter] migrated {n} note(s) in {}", project_root.display());
+            }
+        }
         let label = format!(
             "project:{}",
             project_root.file_name().map(|s| s.to_string_lossy().into_owned()).unwrap_or_default()
@@ -92,7 +113,7 @@ pub fn run(args: AuditArgs) -> Result<i32> {
         reports.push(audit_corpus(
             &label,
             &project_root,
-            &enumerate_project_docs(&project_root),
+            &project_files,
             true,
         ));
     }
@@ -193,14 +214,27 @@ fn audit_corpus(label: &str, root: &Path, files: &[PathBuf], project_required: b
             fm_issues.push(FmIssue { file: rel_str.clone(), issue: "no frontmatter block".into() });
         } else {
             let fm_ref = fm.as_ref();
-            let mut required: Vec<&str> = vec!["type", "description", "created"];
+            // (canonical, legacy_aliases). `created_at` accepts the legacy
+            // `created:` (date-only) so unmigrated notes don't all flag missing.
+            let mut required: Vec<(&str, &[&str])> = vec![
+                ("type", &[][..]),
+                ("description", &[][..]),
+                ("created_at", &["created"][..]),
+            ];
             if project_required {
-                required.push("project");
+                required.push(("project", &[][..]));
             }
-            for k in &required {
-                let present = fm_ref.map(|m| m.contains_key(*k)).unwrap_or(false);
+            for (canonical, aliases) in &required {
+                let present = fm_ref
+                    .map(|m| {
+                        m.contains_key(*canonical) || aliases.iter().any(|a| m.contains_key(*a))
+                    })
+                    .unwrap_or(false);
                 if !present {
-                    fm_issues.push(FmIssue { file: rel_str.clone(), issue: format!("missing `{k}`") });
+                    fm_issues.push(FmIssue {
+                        file: rel_str.clone(),
+                        issue: format!("missing `{canonical}`"),
+                    });
                 }
             }
             // Type validity (after the `missing` check so empty + missing both surface).
@@ -276,6 +310,157 @@ fn audit_corpus(label: &str, root: &Path, files: &[PathBuf], project_required: b
         orphan_notes: orphans,
         duplicate_basenames: duplicates,
     }
+}
+
+/// Rewrite each note's frontmatter to the new schema where applicable:
+///   - rename legacy `created:` (date-only) to `created_at:` (datetime + offset)
+///     using git first-commit timestamp; fall back to file mtime
+///   - add `updated_at` + `updated_by: audit` when missing
+///
+/// Returns the number of files written. Skips README.md (no frontmatter).
+fn migrate_corpus(root: &Path, files: &[PathBuf]) -> usize {
+    let now = timestamps::now_iso8601_local();
+    let mut written = 0usize;
+    for f in files {
+        if f.file_name().map(|n| NAVIGATION_NAMES.iter().any(|nav| *nav == n)).unwrap_or(false) {
+            continue;
+        }
+        let Ok(text) = std::fs::read_to_string(f) else { continue };
+        let Some(m) = FRONTMATTER_RE.captures(&text) else { continue };
+        let whole = m.get(0).expect("group 0").as_str();
+        let inner = m.get(1).expect("group 1").as_str();
+        let body = &text[whole.len()..];
+
+        let fm = match parse_frontmatter(&text) {
+            Some(fm) => fm,
+            None => continue,
+        };
+        let has_created_at = fm.contains_key("created_at");
+        let has_legacy_created = fm.contains_key("created");
+        let has_updated_at = fm.contains_key("updated_at");
+        let has_updated_by = fm.contains_key("updated_by");
+
+        let needs_rename = !has_created_at && has_legacy_created;
+        let needs_updated = !has_updated_at || !has_updated_by;
+        if !needs_rename && !needs_updated {
+            continue;
+        }
+
+        let created_at_value = if needs_rename {
+            git_first_commit_iso(root, f).unwrap_or_else(|| {
+                file_mtime_iso(f).unwrap_or_else(|| now.clone())
+            })
+        } else {
+            String::new()
+        };
+
+        let new_inner = rewrite_frontmatter(
+            inner,
+            needs_rename,
+            &created_at_value,
+            !has_updated_at,
+            &now,
+            !has_updated_by,
+            "audit",
+        );
+
+        // Preserve the original block delimiters exactly: only the inner text
+        // is rewritten. We always emit a trailing newline before `---` to keep
+        // the YAML well-formed.
+        let new_block = format!("---\n{new_inner}\n---\n");
+        let new_text = format!("{new_block}{body}");
+        if new_text != text && std::fs::write(f, new_text.as_bytes()).is_ok() {
+            written += 1;
+        }
+    }
+    written
+}
+
+/// Line-level rewrite that preserves key order and untouched lines. Renames
+/// `created:` → `created_at:` when `rename_created`, and appends `updated_at`
+/// / `updated_by` lines when those keys are missing.
+fn rewrite_frontmatter(
+    inner: &str,
+    rename_created: bool,
+    created_at_value: &str,
+    add_updated_at: bool,
+    updated_at_value: &str,
+    add_updated_by: bool,
+    actor: &str,
+) -> String {
+    let mut out_lines: Vec<String> = Vec::new();
+    for raw_line in inner.split('\n') {
+        let line = raw_line.strip_suffix('\r').unwrap_or(raw_line);
+        if rename_created {
+            if let Some(rest) = strip_key_prefix(line, "created") {
+                // Drop the legacy date value, emit the new key with the
+                // datetime sourced from git. Discard `rest` (the old date)
+                // so we don't double-record it.
+                let _ = rest;
+                out_lines.push(format!("created_at: {created_at_value}"));
+                continue;
+            }
+        }
+        out_lines.push(line.to_string());
+    }
+    // Strip trailing blank lines so appended fields sit flush against the block.
+    while matches!(out_lines.last().map(|s| s.trim().is_empty()), Some(true)) {
+        out_lines.pop();
+    }
+    if add_updated_at {
+        out_lines.push(format!("updated_at: {updated_at_value}"));
+    }
+    if add_updated_by {
+        out_lines.push(format!("updated_by: {actor}"));
+    }
+    out_lines.join("\n")
+}
+
+/// Match `^(\s*)<key>\s*:\s*(.*)$` and return the value tail. Returns None if
+/// the line is indented (it would be a block-list item, not a top-level key).
+fn strip_key_prefix<'a>(line: &'a str, key: &str) -> Option<&'a str> {
+    if line.starts_with(' ') || line.starts_with('\t') {
+        return None;
+    }
+    let rest = line.strip_prefix(key)?;
+    let rest = rest.trim_start();
+    let rest = rest.strip_prefix(':')?;
+    Some(rest.trim_start())
+}
+
+/// Get the ISO 8601 (local-offset) timestamp of the commit that first added
+/// this file, by shelling out to `git log`. Returns None if the file is
+/// untracked or git is unavailable.
+fn git_first_commit_iso(repo_root: &Path, file: &Path) -> Option<String> {
+    let rel = file.strip_prefix(repo_root).ok()?;
+    let output = Command::new("git")
+        .arg("-C")
+        .arg(repo_root)
+        .args(["log", "--diff-filter=A", "--follow", "--format=%aI", "--"])
+        .arg(rel)
+        .output()
+        .ok()?;
+    if !output.status.success() {
+        return None;
+    }
+    let stdout = String::from_utf8(output.stdout).ok()?;
+    // `--diff-filter=A --follow` can still emit multiple lines for renames; the
+    // last line is the original-add commit.
+    let ts = stdout.lines().last()?.trim().to_string();
+    if ts.is_empty() {
+        return None;
+    }
+    // Re-format to %:z (`+HH:MM`) so emitted timestamps are uniform.
+    DateTime::parse_from_rfc3339(&ts)
+        .ok()
+        .map(|dt| dt.format("%Y-%m-%dT%H:%M:%S%:z").to_string())
+}
+
+fn file_mtime_iso(file: &Path) -> Option<String> {
+    let meta = std::fs::metadata(file).ok()?;
+    let mt = meta.modified().ok()?;
+    let dt: DateTime<Local> = mt.into();
+    Some(dt.format("%Y-%m-%dT%H:%M:%S%:z").to_string())
 }
 
 fn extract_wikilinks(body: &str) -> Vec<String> {

@@ -1,7 +1,9 @@
 ---
 type: reference
 description: "Troubleshooting guide for common obsidian-memory plugin issues with diagnosis steps"
-created: 2026-04-30
+created_at: 2026-04-30T00:00:00+08:00
+updated_at: 2026-05-03T00:00:00+08:00
+updated_by: init
 project: claude-obsidian-memory
 ---
 
@@ -48,7 +50,7 @@ Reports config, vault, prereqs, binary location, search smoke-test, overview cac
 - Run `/obsidian-memory:project list` and confirm the repo shows `[on]`. If it shows `[off]`, run `/obsidian-memory:project enable` from inside the repo. If it's missing entirely, the registration prompt was never answered — start a fresh session in the repo or run `enable` directly.
 - The registry keys on the repo's git toplevel (`git rev-parse --show-toplevel`). If you've moved the repo, the old path is stale; `remove` it and re-`enable` from the new location.
 - Confirm the docs aren't all boilerplate (`LICENSE*`, `CHANGELOG*`, `CODE_OF_CONDUCT*`, `SECURITY*`, top-level dotfile dirs) — those are filtered out of the corpus.
-- Project-vault notes need plugin frontmatter to appear in the overview. `obsidian-memory init-project` runs silently each SessionStart for enabled repos and backfills any new files; if a file is missing from the overview, check that it has `type:`/`description:`/`created:`/`project:` in its frontmatter.
+- Project-vault notes need plugin frontmatter to appear in the overview. `obsidian-memory init-project` runs silently each SessionStart for enabled repos and backfills any new files; if a file is missing from the overview, check that it has `type:`/`description:`/`created_at:`/`project:` in its frontmatter.
 
 **Scanning the vault for leaked credentials**
 

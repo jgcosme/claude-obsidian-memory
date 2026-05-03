@@ -14,7 +14,6 @@ use std::process::Command;
 use std::time::Duration;
 
 use anyhow::{Context, Result};
-use chrono::Local;
 use once_cell::sync::Lazy;
 use regex::Regex;
 use serde::Serialize;
@@ -234,7 +233,7 @@ fn derive_description(body: &str, fallback_path: &str) -> String {
 }
 
 fn format_frontmatter(types: &[String], description: &str, project: &str) -> String {
-    let today = Local::now().format("%Y-%m-%d").to_string();
+    let now = crate::vault::timestamps::now_iso8601_local();
     let safe_desc = description.replace('\\', "\\\\").replace('"', "\\\"");
     let type_field = if types.len() == 1 {
         types[0].clone()
@@ -242,7 +241,7 @@ fn format_frontmatter(types: &[String], description: &str, project: &str) -> Str
         format!("[{}]", types.join(", "))
     };
     format!(
-        "---\ntype: {type_field}\ndescription: \"{safe_desc}\"\ncreated: {today}\nproject: {project}\n---\n\n"
+        "---\ntype: {type_field}\ndescription: \"{safe_desc}\"\ncreated_at: {now}\nupdated_at: {now}\nupdated_by: init\nproject: {project}\n---\n\n"
     )
 }
 

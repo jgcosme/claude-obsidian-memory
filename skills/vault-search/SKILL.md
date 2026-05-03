@@ -21,6 +21,7 @@ The vault has three lookup paths. Pick by the shape of the query:
   [--type <preference|reference|findings|decision|learning|tool|journal>] \
   [--path-prefix <Tools|Notes|Journals|Journals/<project>>] \
   [--created-after YYYY-MM-DD] \
+  [--updated-after YYYY-MM-DD] \
   [--project-vault $CLAUDE_PROJECT_DIR] \
   [--json]
 

@@ -177,13 +177,18 @@ pub fn overview(vault: &Path, project: Option<&str>, mode: &str) -> Result<Strin
             None => (journals.clone(), "## Journals (recent)".to_string()),
         };
         scoped.sort_by(|a, b| {
-            // Sort by `created:` desc, fall back to filename desc.
-            let ka = a.1.get("created").cloned().filter(|s| !s.is_empty()).unwrap_or_else(|| {
-                a.0.file_stem().map(|s| s.to_string_lossy().to_string()).unwrap_or_default()
-            });
-            let kb = b.1.get("created").cloned().filter(|s| !s.is_empty()).unwrap_or_else(|| {
-                b.0.file_stem().map(|s| s.to_string_lossy().to_string()).unwrap_or_default()
-            });
+            // Sort by `created_at:` desc (legacy `created:` accepted), fall back
+            // to filename desc. ISO 8601 with offset and bare `YYYY-MM-DD` both
+            // sort lexicographically in chronological order, so a string compare
+            // works across the mixed-corpus migration window.
+            let ka = a.1.get("created_at").or_else(|| a.1.get("created"))
+                .cloned().filter(|s| !s.is_empty()).unwrap_or_else(|| {
+                    a.0.file_stem().map(|s| s.to_string_lossy().to_string()).unwrap_or_default()
+                });
+            let kb = b.1.get("created_at").or_else(|| b.1.get("created"))
+                .cloned().filter(|s| !s.is_empty()).unwrap_or_else(|| {
+                    b.0.file_stem().map(|s| s.to_string_lossy().to_string()).unwrap_or_default()
+                });
             kb.cmp(&ka)
         });
         out.push(label);
@@ -192,7 +197,7 @@ pub fn overview(vault: &Path, project: Option<&str>, mode: &str) -> Result<Strin
         }
         if scoped.len() > RECENT_JOURNAL_LIMIT {
             out.push(format!(
-                "_(+{} older — search by `created:` date)_",
+                "_(+{} older — search by `created_at:` date)_",
                 scoped.len() - RECENT_JOURNAL_LIMIT
             ));
         }

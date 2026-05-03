@@ -71,12 +71,20 @@ pub struct VaultSearchArgs {
     /// Space-separated keywords; matched against path, frontmatter, body.
     #[arg(long)]
     pub keywords: Option<String>,
-    /// ISO date YYYY-MM-DD; only notes with frontmatter `created:` >= this date.
+    /// ISO 8601 datetime (`2026-05-02T14:30:00+08:00`) or date (`2026-05-02`);
+    /// only notes with frontmatter `created_at:` >= this. A bare date is
+    /// interpreted as local-midnight. Legacy `created:` (date-only) still matches.
     #[arg(long = "created-after")]
     pub created_after: Option<String>,
-    /// ISO date YYYY-MM-DD; only notes with `created:` <= this date.
+    /// ISO 8601 datetime or date; only notes with `created_at:` <= this.
     #[arg(long = "created-before")]
     pub created_before: Option<String>,
+    /// ISO 8601 datetime or date; only notes with frontmatter `updated_at:` >= this.
+    #[arg(long = "updated-after")]
+    pub updated_after: Option<String>,
+    /// ISO 8601 datetime or date; only notes with `updated_at:` <= this.
+    #[arg(long = "updated-before")]
+    pub updated_before: Option<String>,
     /// Max results (default 50).
     #[arg(long, default_value_t = 50)]
     pub limit: usize,
@@ -219,6 +227,12 @@ pub struct AuditArgs {
     /// Emit JSON instead of markdown.
     #[arg(long)]
     pub json: bool,
+    /// Migrate frontmatter on each note: rename legacy `created:` (date-only) to
+    /// `created_at:` (ISO 8601 with local offset, sourced from git first-commit
+    /// timestamp; falls back to file mtime). Adds `updated_at` + `updated_by: audit`
+    /// when missing. Rewrites only the frontmatter block.
+    #[arg(long = "fix-frontmatter")]
+    pub fix_frontmatter: bool,
 }
 
 // ---------------------------------------------------------------------------
