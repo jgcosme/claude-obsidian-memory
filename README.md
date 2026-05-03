@@ -2,6 +2,7 @@
 type: reference
 description: "Overview of obsidian-memory plugin - vault-backed persistent memory for Claude Code"
 created_at: 2026-04-30T00:00:00+08:00
+created_by: init
 updated_at: 2026-05-03T00:00:00+08:00
 updated_by: init
 project: claude-obsidian-memory
@@ -16,7 +17,7 @@ A Claude Code plugin that turns a markdown directory into Claude's persistent me
 Claude Code's per-project auto-memory (`~/.claude/projects/*/memory/`) is siloed and not editable in any UI. This plugin replaces it with a vault-backed system:
 
 - **Transparent memory.** Nothing is hidden in a database or vector index — every fact the agent recalls is a file you can open and correct. Fixing a wrong memory is a text edit, not a prompt negotiation.
-- **Frontmatter as source of truth.** Every note declares `type`, `description`, `created_at`, `updated_at`, `updated_by` (and `project` when scoped). The plugin writes those fields automatically and derives everything else (recall, summaries, audits) from them — no index to maintain.
+- **Frontmatter as source of truth.** Every note declares `type`, `description`, `created_at`, `created_by`, `updated_at`, `updated_by` (and `project` when scoped). The plugin writes those fields automatically and derives everything else (recall, summaries, audits) from them — no index to maintain.
 - **Git-tracked.** Every memory write is a diff. Auto-commit on by default; auto-push opt-in.
 - **Obsidian-friendly, not Obsidian-required.** The vault is just markdown — search runs in pure Python. Obsidian.app adds a UI but no plugin-required functionality.
 - **Three lifecycle hooks + two skills.** `SessionStart` loads context, `UserPromptSubmit` runs a proactive retrieval gate (description-anchored), and two agent-driven skills cover reads and writes:

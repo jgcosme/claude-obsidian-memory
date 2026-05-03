@@ -241,7 +241,7 @@ fn format_frontmatter(types: &[String], description: &str, project: &str) -> Str
         format!("[{}]", types.join(", "))
     };
     format!(
-        "---\ntype: {type_field}\ndescription: \"{safe_desc}\"\ncreated_at: {now}\nupdated_at: {now}\nupdated_by: init\nproject: {project}\n---\n\n"
+        "---\ntype: {type_field}\ndescription: \"{safe_desc}\"\ncreated_at: {now}\ncreated_by: init\nupdated_at: {now}\nupdated_by: init\nproject: {project}\n---\n\n"
     )
 }
 

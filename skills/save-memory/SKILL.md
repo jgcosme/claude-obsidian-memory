@@ -98,8 +98,9 @@ Single type:
 type: decision
 description: "one-line hook"
 created_at: 2026-05-03T22:30:00+08:00   # ISO 8601, current local time with offset
+created_by: skill                        # this skill is the writer
 updated_at: 2026-05-03T22:30:00+08:00   # same as created_at on first write
-updated_by: skill                        # this skill is the writer
+updated_by: skill                        # same actor as created_by, on first write
 project: <name>                          # only if project-scoped
 ---
 ```
@@ -111,13 +112,14 @@ Multi-type (note genuinely spans axes — first type drives routing):
 type: [findings, decision]
 description: "one-line hook"
 created_at: 2026-05-03T22:30:00+08:00
+created_by: skill
 updated_at: 2026-05-03T22:30:00+08:00
 updated_by: skill
 project: <name>
 ---
 ```
 
-`created_at` / `updated_at` are ISO 8601 with local offset — get the value from `date +%Y-%m-%dT%H:%M:%S%z | sed 's/\(..\)$/:\1/'` (or the equivalent helper your shell exposes). Use `updated_by: skill` since save-memory is the actor. When you EXTEND an existing note (smallest edit on user correction), bump `updated_at` to now and set `updated_by: skill`; leave `created_at` alone.
+`created_at` / `updated_at` are ISO 8601 with local offset — get the value from `date +%Y-%m-%dT%H:%M:%S%z | sed 's/\(..\)$/:\1/'` (or the equivalent helper your shell exposes). Use `created_by: skill` and `updated_by: skill` since save-memory is the actor. When you EXTEND an existing note (smallest edit on user correction), bump `updated_at` to now and set `updated_by: skill`; leave `created_at` and `created_by` alone — those record the original author, not the last toucher.
 
 Always wrap `description:` in double quotes — descriptions commonly contain `:`, `[[wikilinks]]`, or `[brackets]`, all of which break unquoted YAML and silently truncate the description in the auto-overview. Escape embedded `"` as `\"`.
 

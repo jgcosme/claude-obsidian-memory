@@ -38,6 +38,7 @@ pub struct SearchHit {
     pub description: String,
     pub project: String,
     pub created_at: String,
+    pub created_by: String,
     pub updated_at: String,
     pub updated_by: String,
 }
@@ -208,6 +209,7 @@ fn score_corpus(
             .and_then(|m| m.get("created_at").or_else(|| m.get("created")))
             .cloned()
             .unwrap_or_default();
+        let created_by = fm_ref.and_then(|m| m.get("created_by")).cloned().unwrap_or_default();
         let updated_at = fm_ref.and_then(|m| m.get("updated_at")).cloned().unwrap_or_default();
         let updated_by = fm_ref.and_then(|m| m.get("updated_by")).cloned().unwrap_or_default();
 
@@ -221,6 +223,7 @@ fn score_corpus(
                 description,
                 project,
                 created_at,
+                created_by,
                 updated_at,
                 updated_by,
             },
