@@ -2,6 +2,7 @@
 type: tool
 description: Obsidian CLI commands, vault path, frontmatter search syntax
 created_at: __NOW__
+created_by: init
 updated_at: __NOW__
 updated_by: init
 ---

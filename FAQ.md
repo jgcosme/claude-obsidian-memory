@@ -2,6 +2,7 @@
 type: reference
 description: "FAQ about plugin behavior - session scoping, vault sharing, and related questions"
 created_at: 2026-04-30T00:00:00+08:00
+created_by: init
 updated_at: 2026-05-03T00:00:00+08:00
 updated_by: init
 project: claude-obsidian-memory

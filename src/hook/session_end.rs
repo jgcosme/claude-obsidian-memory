@@ -238,7 +238,7 @@ Do steps 1-3 first. Step 4 (the journal) is written last so its bullets can refe
              → {project_dir}/<matched-folder>/<slug>.md  (with project: from the registry)
         2. Otherwise → {vault}/Notes/<slug>.md  (with `project: {project_name}` if project-scoped)
 
-   Frontmatter on every new note: type, description, created_at, updated_at, updated_by (+ project when scoped). Set `created_at` and `updated_at` to the current local time in ISO 8601 with offset (e.g. `2026-05-03T22:30:00+08:00`). Set `updated_by: hook` (this review IS the hook). When you MODIFY an existing note in step 2, bump `updated_at` to now and set `updated_by: hook`. `type:` is either a single string (`type: decision`) or a YAML list (`type: [findings, decision]`).
+   Frontmatter on every new note: type, description, created_at, created_by, updated_at, updated_by (+ project when scoped). Set `created_at` and `updated_at` to the current local time in ISO 8601 with offset (e.g. `2026-05-03T22:30:00+08:00`). Set both `created_by: hook` and `updated_by: hook` (this review IS the hook). When you MODIFY an existing note in step 2, bump `updated_at` to now and set `updated_by: hook`; do NOT touch `created_at` or `created_by`. `type:` is either a single string (`type: decision`) or a YAML list (`type: [findings, decision]`).
 
    Always wrap the `description:` value in double quotes (e.g. `description: "one-line hook"`). Descriptions often contain `:`, `[[wikilinks]]`, or `[brackets]` — unquoted, these break YAML parsing. Escape any embedded `"` as `\"`. This rule also applies when you rewrite an existing note's `description` (step 2) or the journal's day-summary `description` (step 4).
 
@@ -270,7 +270,7 @@ Do steps 1-3 first. Step 4 (the journal) is written last so its bullets can refe
 
    Journals are scoped one-file-per-project-per-day: the directory `{project_name}/` segregates this project's day from any other project's day. Use the `Write` tool — it creates parent directories automatically.
 
-   New file: frontmatter (type=journal, description=<one-line day summary>, project={project_name}, created_at=<now ISO 8601 with offset, e.g. {today}T{now}±HH:MM>, updated_at=<same>, updated_by=hook) + "## Session {now}" + 3-6 bullets covering work, decisions, learnings.
+   New file: frontmatter (type=journal, description=<one-line day summary>, project={project_name}, created_at=<now ISO 8601 with offset, e.g. {today}T{now}±HH:MM>, created_by=hook, updated_at=<same>, updated_by=hook) + "## Session {now}" + 3-6 bullets covering work, decisions, learnings.
 
    Existing file: append a "## Session {now}" section. Do not edit any prior content (earlier sessions today, earlier days). You MAY (and should) rewrite the frontmatter `description` to summarize the full day now that more sessions exist; whenever you touch frontmatter, bump `updated_at` and set `updated_by: hook`.
 
