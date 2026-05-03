@@ -1,5 +1,35 @@
 # Changelog
 
+## v2.1.0 — Frontmatter timestamps + actor attribution
+
+Adds datetime-aware `created_at` / `updated_at` and per-actor `created_by` / `updated_by` fields to vault note frontmatter, replacing the date-only `created` field.
+
+### What's new
+
+- **`created_at`** — ISO 8601 with local offset (e.g. `2026-05-03T22:30:00+08:00`). Replaces the date-only `created`.
+- **`updated_at`** — ISO 8601 with local offset. Bumped on every plugin-driven write. Manual edits in Obsidian intentionally leave it stale (`git log` is authoritative for true last-edit semantics).
+- **`updated_by`** — last plugin-write actor: `skill | hook | audit | init`.
+- **`created_by`** — original author at note creation, same vocabulary. Set once and never bumped.
+- **`audit --fix-frontmatter`** — one-shot migration. Sources `created_at` from each note's git first-commit timestamp (falls back to file mtime); adds `updated_at` + `updated_by: audit` when missing; preserves frontmatter key order.
+- **New search filters** — `--updated-after` / `--updated-before` accept ISO 8601 datetimes or bare dates (date-only input is treated as local midnight).
+
+### Compatibility
+
+- Reader path still accepts legacy `created:` (date-only) so unmigrated notes keep working. Filters fall back transparently.
+- `SearchHit` JSON now exposes `created_at`, `updated_at`, `updated_by`, `created_by` (empty string when absent).
+- Audit's required-fields check accepts either `created_at` or legacy `created`. `created_by` is intentionally not required (would falsely flag every legacy note).
+- No backfill of `created_by` — the original author of legacy notes is unknown; `git blame` is the fallback.
+
+### Migrating an existing vault
+
+```
+obsidian-memory audit --fix-frontmatter
+```
+
+Idempotent, safe to re-run. Migrates `created` → `created_at` and adds `updated_at` + `updated_by: audit`. Preserves any existing user edits.
+
+Closes #4, #7.
+
 ## v2.0.0 — Rust port
 
 **Breaking change.** All hook scripts and helpers ported from Python + bash to a single static Rust binary, distributed via GitHub Releases.

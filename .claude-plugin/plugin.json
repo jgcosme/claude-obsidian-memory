@@ -1,7 +1,7 @@
 {
   "name": "obsidian-memory",
   "description": "Obsidian-backed persistent memory for Claude Code. SessionStart loads vault context; UserPromptSubmit retrieves relevant notes per turn via a description-anchored gate; SessionEnd journals + writes proactive notes with auto-commit.",
-  "version": "2.0.0",
+  "version": "2.1.0",
   "author": {
     "name": "Jeff Cosme",
     "email": "jeff@thinkingmachin.es"
