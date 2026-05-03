@@ -119,7 +119,11 @@ project: <name>
 ---
 ```
 
-`created_at` / `updated_at` are ISO 8601 with local offset — get the value from `date +%Y-%m-%dT%H:%M:%S%z | sed 's/\(..\)$/:\1/'` (or the equivalent helper your shell exposes). Use `created_by: skill` and `updated_by: skill` since save-memory is the actor. When you EXTEND an existing note (smallest edit on user correction), bump `updated_at` to now and set `updated_by: skill`; leave `created_at` and `created_by` alone — those record the original author, not the last toucher.
+`created_at` / `updated_at` are ISO 8601 with local offset — get the value from `date +%Y-%m-%dT%H:%M:%S%z | sed 's/\(..\)$/:\1/'` (or the equivalent helper your shell exposes).
+
+`created_by` and `updated_by` MUST be the literal string `skill` — not `save-memory`, not the skill's filename, not any other variant. The actor enum is exactly `{skill, hook, audit, init}` and `skill` is the only correct value when this skill writes. Writing anything else (e.g. `save-memory`) corrupts the vault enum and will get flagged by audit.
+
+When you EXTEND an existing note (smallest edit on user correction), bump `updated_at` to now and set `updated_by: skill`; leave `created_at` and `created_by` alone — those record the original author, not the last toucher.
 
 Always wrap `description:` in double quotes — descriptions commonly contain `:`, `[[wikilinks]]`, or `[brackets]`, all of which break unquoted YAML and silently truncate the description in the auto-overview. Escape embedded `"` as `\"`.
 

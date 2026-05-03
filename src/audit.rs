@@ -29,7 +29,7 @@ use serde::Serialize;
 use crate::cli::AuditArgs;
 use crate::project_docs::enumerate_project_docs;
 use crate::vault::frontmatter::{
-    FRONTMATTER_RE, VALID_TYPES, note_types, parse_frontmatter,
+    FRONTMATTER_RE, VALID_ACTORS, VALID_TYPES, note_types, parse_frontmatter,
 };
 use crate::vault::timestamps;
 use crate::vault::walk::{absolute, collect_md_files, expand_user, resolve_vault};
@@ -250,6 +250,22 @@ fn audit_corpus(label: &str, root: &Path, files: &[PathBuf], project_required: b
                                 issue: format!("unknown type `{t}` (valid: {})", VALID_TYPES.join(", ")),
                             });
                         }
+                    }
+                }
+            }
+            // Actor enum validity for `created_by` / `updated_by`. Both are
+            // optional (legacy notes don't have them), so we only flag when the
+            // key is present with an out-of-enum value.
+            for actor_key in ["created_by", "updated_by"] {
+                if let Some(v) = fm_ref.and_then(|m| m.get(actor_key)) {
+                    if !VALID_ACTORS.contains(&v.as_str()) {
+                        fm_issues.push(FmIssue {
+                            file: rel_str.clone(),
+                            issue: format!(
+                                "unknown `{actor_key}` value `{v}` (valid: {})",
+                                VALID_ACTORS.join(", ")
+                            ),
+                        });
                     }
                 }
             }

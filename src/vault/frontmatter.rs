@@ -26,6 +26,11 @@ pub const VALID_TYPES: &[&str] = &[
     "preference", "reference", "findings", "decision", "learning", "tool", "journal",
 ];
 
+/// Canonical actor enum for `created_by` / `updated_by`. Only the four plugin
+/// entrypoints write frontmatter — direct CLI invocations are not plugin writes
+/// (see `Notes/issue-7-frontmatter-timestamps-decisions.md`).
+pub const VALID_ACTORS: &[&str] = &["skill", "hook", "audit", "init"];
+
 /// Parse a YAML-ish frontmatter block into a flat map.
 ///
 /// Returns `None` if no frontmatter is present (no leading `---`).

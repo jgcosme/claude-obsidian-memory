@@ -1,5 +1,13 @@
 # Changelog
 
+## v2.1.1 — Actor enum validation + save-memory tightening
+
+Patch release fixing one out-of-enum drift and hardening the writer + audit so it can't recur silently.
+
+- **`save-memory` SKILL.md** — explicit "MUST be the literal string `skill`, not `save-memory`" callout for `created_by` / `updated_by`. Previous wording let the LLM drift to writing the skill's filename instead of the actor token.
+- **`audit`** — now flags `created_by` / `updated_by` values outside the `{skill, hook, audit, init}` enum (same shape as the existing `unknown type` check). Optional fields, so legacy notes without them stay clean.
+- **One-off vault data fix** — single note `Notes/slack-sessions-todo-vs-issues-policy.md` had `updated_by: save-memory` (LLM drift); normalized to `skill`.
+
 ## v2.1.0 — Frontmatter timestamps + actor attribution
 
 Adds datetime-aware `created_at` / `updated_at` and per-actor `created_by` / `updated_by` fields to vault note frontmatter, replacing the date-only `created` field.
