@@ -208,6 +208,28 @@ fn audit_corpus(label: &str, root: &Path, files: &[PathBuf], project_required: b
         let fm = parse_frontmatter(&text);
         let is_navigation = f.file_name().map(|n| NAVIGATION_NAMES.iter().any(|nav| *nav == n)).unwrap_or(false);
 
+        // Deep YAML validity check. The lenient parse_frontmatter above is
+        // tolerant of malformed input (it just returns the keys it can
+        // recognize), so a note with `description: foo: bar` parses fine
+        // there but blows up in Obsidian's strict YAML parser. Run the
+        // inner text through serde_yaml so genuine malformations surface.
+        if !is_navigation {
+            if let Some(m) = FRONTMATTER_RE.captures(&text) {
+                if let Some(inner) = m.get(1) {
+                    if let Err(err) = serde_yaml::from_str::<serde_yaml::Value>(inner.as_str()) {
+                        // Slack/Obsidian show the first line of the YAML
+                        // error; trim ours similarly so reports stay readable.
+                        let msg = err.to_string();
+                        let first_line = msg.lines().next().unwrap_or(&msg).trim();
+                        fm_issues.push(FmIssue {
+                            file: rel_str.clone(),
+                            issue: format!("malformed YAML: {first_line}"),
+                        });
+                    }
+                }
+            }
+        }
+
         if is_navigation {
             // README.md: skip frontmatter checks entirely.
         } else if fm.is_none() {
@@ -379,6 +401,10 @@ fn migrate_corpus(root: &Path, files: &[PathBuf]) -> usize {
             !has_updated_by,
             "audit",
         );
+        // Backstop the writers: when the model has emitted a value
+        // containing fragile YAML chars without quoting, wrap it. Catches
+        // the common `description: foo: bar` case and friends.
+        let new_inner = quote_unsafe_scalars(&new_inner);
 
         // Preserve the original block delimiters exactly: only the inner text
         // is rewritten. We always emit a trailing newline before `---` to keep
@@ -390,6 +416,100 @@ fn migrate_corpus(root: &Path, files: &[PathBuf]) -> usize {
         }
     }
     written
+}
+
+/// Quoting backstop for top-level scalar values whose model-written content
+/// contains chars YAML treats specially. Only acts on lines that look like
+/// `key: value` at column zero (no indent) — block-list items and nested
+/// mappings are left alone. Intentionally conservative: if we can't be sure
+/// the value is a plain scalar that *should* be quoted, we leave it as-is.
+fn quote_unsafe_scalars(inner: &str) -> String {
+    inner
+        .lines()
+        .map(|line| {
+            // Indented lines are list items / block continuations — skip.
+            if line.starts_with(' ') || line.starts_with('\t') {
+                return line.to_string();
+            }
+            // `key: value` — find the first `:` followed by a space (or EOL).
+            let Some(idx) = find_top_level_colon(line) else {
+                return line.to_string();
+            };
+            let (key_part, rest) = line.split_at(idx);
+            // rest starts with `:`; strip it and any leading whitespace.
+            let value = rest[1..].trim_start();
+            if value.is_empty() {
+                return line.to_string();
+            }
+            // Already quoted? (single, double, or starts a block scalar).
+            let first = value.chars().next().unwrap();
+            if matches!(first, '"' | '\'' | '|' | '>' | '[' | '{') {
+                return line.to_string();
+            }
+            if value_is_yaml_safe(value) {
+                return line.to_string();
+            }
+            // Wrap in double quotes and escape any embedded `"` / `\`.
+            let escaped = value.replace('\\', "\\\\").replace('"', "\\\"");
+            format!("{key_part}: \"{escaped}\"")
+        })
+        .collect::<Vec<_>>()
+        .join("\n")
+}
+
+/// Find the byte offset of the first `:` that ends a top-level key — the
+/// next char must be whitespace or end-of-line. Returns None if the line
+/// isn't a key-value pair (no colon, or the colon is part of the value).
+fn find_top_level_colon(line: &str) -> Option<usize> {
+    let bytes = line.as_bytes();
+    for (i, &b) in bytes.iter().enumerate() {
+        if b == b':' {
+            // Followed by whitespace, end-of-line, or `:` (handled below)?
+            let next = bytes.get(i + 1);
+            if matches!(next, None | Some(b' ') | Some(b'\t')) {
+                return Some(i);
+            }
+        }
+    }
+    None
+}
+
+/// Quick heuristic for "this value parses as a plain scalar string."
+/// Conservative: if it contains any of these chars, force quoting:
+///   - `:` followed by space (would parse as nested mapping)
+///   - `[` or `]` (flow sequence)
+///   - `{` or `}` (flow mapping)
+///   - `&`, `*` at start (anchor / alias)
+///   - `!` at start (tag)
+///   - `#` preceded by space (comment)
+///   - `,` (flow context separator)
+///   - leading `-`, `?`, `>`, `|` (block markers)
+fn value_is_yaml_safe(value: &str) -> bool {
+    let bytes = value.as_bytes();
+    if bytes.is_empty() {
+        return true;
+    }
+    match bytes[0] {
+        b'-' | b'?' | b'>' | b'|' | b'&' | b'*' | b'!' | b'%' | b'`' | b'@' => return false,
+        _ => {}
+    }
+    let mut prev: u8 = 0;
+    for (i, &b) in bytes.iter().enumerate() {
+        if b == b':' {
+            let next = bytes.get(i + 1);
+            if matches!(next, None | Some(b' ') | Some(b'\t')) {
+                return false;
+            }
+        }
+        if matches!(b, b'[' | b']' | b'{' | b'}' | b',') {
+            return false;
+        }
+        if b == b'#' && (prev == b' ' || prev == b'\t' || prev == 0) {
+            return false;
+        }
+        prev = b;
+    }
+    true
 }
 
 /// Line-level rewrite that preserves key order and untouched lines. Renames
@@ -656,4 +776,67 @@ fn build_audit_json(now: &str, reports: &[CorpusReport]) -> Result<String> {
     root.insert("corpora".into(), Value::Array(corpora));
     let v = Value::Object(root);
     Ok(crate::jsonfmt::to_string_pretty_ascii(&v)?)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn unquoted_description_with_colon_gets_quoted() {
+        let inner = "type: reference\ndescription: foo: bar baz\ncreated_at: 2026-05-09";
+        let out = quote_unsafe_scalars(inner);
+        assert!(out.contains("description: \"foo: bar baz\""), "got: {out}");
+    }
+
+    #[test]
+    fn already_quoted_left_alone() {
+        let inner = "description: \"foo: bar\"";
+        assert_eq!(quote_unsafe_scalars(inner), inner);
+    }
+
+    #[test]
+    fn safe_value_left_alone() {
+        let inner = "type: reference\ncreated_at: 2026-05-09\nproject: foo";
+        assert_eq!(quote_unsafe_scalars(inner), inner);
+    }
+
+    #[test]
+    fn brackets_force_quoting() {
+        let inner = "description: foo [warn] bar";
+        let out = quote_unsafe_scalars(inner);
+        assert!(out.contains("description: \"foo [warn] bar\""), "got: {out}");
+    }
+
+    #[test]
+    fn embedded_quote_is_escaped() {
+        let inner = "description: he said \"hi: \" loudly";
+        let out = quote_unsafe_scalars(inner);
+        assert!(
+            out.contains(r#"description: "he said \"hi: \" loudly""#),
+            "got: {out}"
+        );
+    }
+
+    #[test]
+    fn block_list_items_left_alone() {
+        let inner = "tags:\n  - foo: bar\n  - baz";
+        // The `- foo: bar` is indented; the heuristic must not touch it.
+        let out = quote_unsafe_scalars(inner);
+        assert_eq!(out, inner);
+    }
+
+    #[test]
+    fn iso_timestamp_left_alone() {
+        // The colons in HH:MM:SS aren't followed by whitespace, so they
+        // shouldn't trip the heuristic.
+        let inner = "created_at: 2026-05-09T13:42:01+08:00";
+        assert_eq!(quote_unsafe_scalars(inner), inner);
+    }
+
+    #[test]
+    fn block_scalar_left_alone() {
+        let inner = "body: |\n  multi-line\n  text";
+        assert_eq!(quote_unsafe_scalars(inner), inner);
+    }
 }
