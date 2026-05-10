@@ -21,7 +21,7 @@ use serde_json::Value;
 
 use crate::cli::InitProjectArgs;
 use crate::project_docs::enumerate_project_docs;
-use crate::vault::frontmatter::{FRONTMATTER_RE, VALID_TYPES};
+use crate::vault::frontmatter::{FRONTMATTER_RE, is_valid_type};
 use crate::vault::walk::{absolute, expand_user};
 
 const FALLBACK_TYPE: &str = "reference";
@@ -174,7 +174,7 @@ fn init_project_vault(
             description: derive_description(body, &rel_str),
         });
         let mut types_list: Vec<String> = cls.types.into_iter()
-            .filter(|t| VALID_TYPES.contains(&t.as_str()))
+            .filter(|t| is_valid_type(t))
             .collect();
         if types_list.is_empty() {
             types_list.push(FALLBACK_TYPE.into());
@@ -398,14 +398,14 @@ fn parse_llm_output(raw: &str, chunk: &[(PathBuf, String)]) -> BTreeMap<String, 
                 let mut cleaned: Vec<String> = Vec::new();
                 for t in arr {
                     if let Some(s) = t.as_str() {
-                        if VALID_TYPES.contains(&s) && !cleaned.iter().any(|x| x == s) {
+                        if is_valid_type(s) && !cleaned.iter().any(|x| x == s) {
                             cleaned.push(s.to_string());
                         }
                     }
                 }
                 if cleaned.is_empty() { vec![FALLBACK_TYPE.into()] } else { cleaned }
             }
-            Value::String(s) if VALID_TYPES.contains(&s.as_str()) => vec![s],
+            Value::String(s) if is_valid_type(&s) => vec![s],
             _ => vec![FALLBACK_TYPE.into()],
         };
 

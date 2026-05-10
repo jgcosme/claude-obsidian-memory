@@ -34,6 +34,11 @@ Reports config, vault, prereqs, binary location, search smoke-test, overview cac
 - If it says `vault not found at '...'`, run `"$CLAUDE_PLUGIN_ROOT/bin/run" setup` to scaffold the vault.
 - If you don't see any log at all, the hook may not be registered — try `/reload-plugins` and restart your session.
 
+**Audit reports `unknown type` after I edited `types.yaml`**
+- The runtime type vocabulary lives at `~/.config/obsidian-memory/types.yaml`. If you remove or rename a type, every existing note that used it becomes invalid. Either restore the type, re-type the affected notes, or accept the warnings.
+- `obsidian-memory types remove --name <X>` refuses without `--force` if any notes use the type — that's the safety net. If you bypassed it with `--force`, audit's flags are surfacing exactly the breakage you opted into.
+- To restore the seven shipped defaults: `obsidian-memory types reset --yes`. This overwrites `~/.config/obsidian-memory/types.yaml` with the embedded example, discarding any custom types.
+
 **Reviews are too aggressive / writing too many notes**
 - The dedup check (typed search before write) usually catches duplicates. If something slips through, delete the note and `git commit`. The next review will see the deletion in history and avoid re-creating.
 - For finer control, edit the review prompt in `src/hook/session_end.rs` (`build_review_prompt`, search for `PROACTIVE NOTES`) and rebuild.

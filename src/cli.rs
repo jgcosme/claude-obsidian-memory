@@ -34,6 +34,72 @@ pub enum TopLevel {
     Status,
     /// Scaffold the vault, config, and Claude Code statusline integration.
     Setup,
+    /// Inspect the memory-type vocabulary (~/.config/obsidian-memory/types.yaml).
+    Types(TypesArgs),
+}
+
+// ---------------------------------------------------------------------------
+// types
+// ---------------------------------------------------------------------------
+#[derive(Args, Debug)]
+pub struct TypesArgs {
+    #[command(subcommand)]
+    pub command: TypesCmd,
+}
+
+#[derive(Subcommand, Debug)]
+pub enum TypesCmd {
+    /// Print the effective type set (with source: user file vs embedded default).
+    List {
+        /// Emit JSON instead of human-readable rows.
+        #[arg(long)]
+        json: bool,
+    },
+    /// Parse the user types file (or embedded default) and report errors.
+    Validate,
+    /// Print the path of the user types file (whether or not it exists).
+    Path,
+    /// Append a new type to the user file. Errors on duplicate name.
+    Add {
+        #[arg(long)]
+        name: String,
+        #[arg(long)]
+        description: String,
+        #[arg(long)]
+        personal_folder: String,
+        /// Comma-separated list of project-vault folder names to probe.
+        #[arg(long, value_delimiter = ',', default_value = "")]
+        project_folders: Vec<String>,
+        /// Mark as system-managed (rare — only the plugin should normally write these).
+        #[arg(long)]
+        system_managed: bool,
+    },
+    /// Remove a type by name. Refuses if vault notes use it (override with --force).
+    Remove {
+        #[arg(long)]
+        name: String,
+        /// Remove even if existing vault notes use the type.
+        #[arg(long)]
+        force: bool,
+    },
+    /// Patch one or more fields of an existing type.
+    Edit {
+        #[arg(long)]
+        name: String,
+        #[arg(long)]
+        description: Option<String>,
+        #[arg(long)]
+        personal_folder: Option<String>,
+        /// Replace project-folders entirely. Pass an empty string to clear.
+        #[arg(long, value_delimiter = ',')]
+        project_folders: Option<Vec<String>>,
+    },
+    /// Restore the user file to the embedded default (destructive).
+    Reset {
+        /// Skip the confirmation prompt (always required for non-interactive use).
+        #[arg(long)]
+        yes: bool,
+    },
 }
 
 // ---------------------------------------------------------------------------
@@ -312,6 +378,7 @@ impl Cli {
             TopLevel::Usage => crate::usage::run(),
             TopLevel::Status => crate::status::run(),
             TopLevel::Setup => crate::setup::run(),
+            TopLevel::Types(args) => crate::vault::types::cli_run(args),
         }
     }
 }

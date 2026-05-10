@@ -85,6 +85,14 @@ pub fn run() -> Result<i32> {
         println!("[=] config exists, leaving it alone: {}", config_file.display());
     }
 
+    let types_file = config_dir.join("types.yaml");
+    if !types_file.is_file() {
+        std::fs::copy(examples.join("types.yaml.example"), &types_file)?;
+        println!("[+] created {} (edit to customize the memory-type vocabulary)", types_file.display());
+    } else {
+        println!("[=] types.yaml exists, leaving it alone: {}", types_file.display());
+    }
+
     let secrets_file = config_dir.join("secrets.env");
     if !secrets_file.is_file() {
         std::fs::copy(examples.join("secrets.env.example"), &secrets_file)?;

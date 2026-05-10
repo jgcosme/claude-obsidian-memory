@@ -1,0 +1,54 @@
+# Memory type definitions — read by obsidian-memory at runtime.
+#
+# This file is the authoritative source of truth for the type vocabulary used by
+# audit (validation), the SessionStart overview (ordering), save-memory and
+# project-docs (folder routing). Edit it to add, remove, or retarget types.
+#
+# Schema:
+#   types[<name>].description     - one-line semantic hook
+#   types[<name>].personal_folder - subfolder under the personal vault root
+#                                   (auto-scaffolded on first write)
+#   types[<name>].project_folders - candidate folder names probed under
+#                                   <repo>/ and <repo>/docs/ when the cwd is
+#                                   a registered project-vault. Empty list =
+#                                   never route to a project-vault folder.
+#   types[<name>].system_managed  - true means the plugin owns this type;
+#                                   save-memory and human writes never use it
+#                                   (currently only `journal`).
+#
+# The longer per-type semantics live in <vault>/types.md (or the in-binary
+# copy at templates/types.md). Keep this file in sync if you fork the
+# definitions.
+
+schema_version: 1
+
+types:
+  preference:
+    description: "Behavioral rule the agent should follow."
+    personal_folder: Notes
+    project_folders: []
+  reference:
+    description: "Atomic factual lookup — URLs, IDs, configs, channels, dashboards, endpoints."
+    personal_folder: Notes
+    project_folders: [references]
+  findings:
+    description: "Synthesis from reading multiple sources — landscape maps, comparisons, surveys."
+    personal_folder: Notes
+    project_folders: [findings, research]
+  decision:
+    description: "Choice rationale with alternatives ruled out."
+    personal_folder: Notes
+    project_folders: [decisions, adr, decision-records]
+  learning:
+    description: "Easy-to-miss gotchas and fixes — foot-gun database."
+    personal_folder: Notes
+    project_folders: [learnings, lessons]
+  tool:
+    description: "How to use a CLI / API / service."
+    personal_folder: Tools
+    project_folders: []
+  journal:
+    description: "Session summary — system-managed, SessionEnd-only."
+    personal_folder: Journals
+    project_folders: []
+    system_managed: true

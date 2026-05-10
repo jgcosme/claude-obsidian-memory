@@ -29,7 +29,7 @@ use serde::Serialize;
 use crate::cli::AuditArgs;
 use crate::project_docs::enumerate_project_docs;
 use crate::vault::frontmatter::{
-    FRONTMATTER_RE, VALID_ACTORS, VALID_TYPES, note_types, parse_frontmatter,
+    FRONTMATTER_RE, VALID_ACTORS, is_valid_type, note_types, parse_frontmatter, valid_types,
 };
 use crate::vault::timestamps;
 use crate::vault::walk::{absolute, collect_md_files, expand_user, resolve_vault};
@@ -266,10 +266,10 @@ fn audit_corpus(label: &str, root: &Path, files: &[PathBuf], project_required: b
                     fm_issues.push(FmIssue { file: rel_str.clone(), issue: "empty `type`".into() });
                 } else {
                     for t in &types {
-                        if !VALID_TYPES.contains(&t.as_str()) {
+                        if !is_valid_type(t) {
                             fm_issues.push(FmIssue {
                                 file: rel_str.clone(),
-                                issue: format!("unknown type `{t}` (valid: {})", VALID_TYPES.join(", ")),
+                                issue: format!("unknown type `{t}` (valid: {})", valid_types().join(", ")),
                             });
                         }
                     }

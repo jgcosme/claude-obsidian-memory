@@ -34,7 +34,7 @@ Results carry a `corpus` field — `personal` or `project`. If a match exists, p
 
 ## 2. Pick the type(s)
 
-The canonical type definitions live in `${CLAUDE_PLUGIN_ROOT}/templates/types.md` — read that file when you need the full semantics. Quick reference:
+Semantics live in `${CLAUDE_PLUGIN_ROOT}/templates/types.md`. The live type set comes from `"$PLUGIN_RUN" types list` (or `--json`) — this includes any user-added types. The shipped seven:
 
 | Type | What it captures |
 |---|---|
@@ -52,38 +52,26 @@ A note can carry multiple types when it genuinely spans axes — e.g. a research
 
 ## 3. Route the note
 
-The first type in the list drives routing. Apply this rule:
+The first type drives routing. The destination comes from the type's config in `~/.config/obsidian-memory/types.yaml`:
 
 ```
 PRIMARY = types[0]
 
-A. PRIMARY == tool
-   → $OBSIDIAN_VAULT_PATH/Tools/<slug>.md
-     (Tools are always personal-vault and cross-project; no project: tag.)
+1. Look up the type's routing fields:
+     CFG=$("$PLUGIN_RUN" types list --json | jq -r '.types[] | select(.name=="'"$PRIMARY"'")')
+     PERSONAL=$(echo "$CFG" | jq -r .personal_folder)
+     HAS_PROJECT=$(echo "$CFG" | jq '.project_folders | length > 0')
 
-B. PRIMARY == preference
-   → $OBSIDIAN_VAULT_PATH/Notes/<slug>.md
-     (Add project: tag only if the rule is narrowly scoped to one project.)
-
-C. PRIMARY in {reference, findings, decision, learning}:
-   1. Look up cwd's project-vault status:
-        STATUS=$("$PLUGIN_RUN" projects lookup "$CLAUDE_PROJECT_DIR")
-
-   2. If STATUS == enabled, ask whether a matching repo folder exists:
-        FOLDER=$("$PLUGIN_RUN" project-docs match-type-folder \
-                  "$CLAUDE_PROJECT_DIR" --type <PRIMARY>)
-      If exit=0, FOLDER is the repo-relative path (e.g. `docs/decisions`).
-
-   3. Decide:
-        STATUS=enabled AND FOLDER non-empty
-            → $CLAUDE_PROJECT_DIR/$FOLDER/<slug>.md  (project-vault note)
-        otherwise
-            → $OBSIDIAN_VAULT_PATH/Notes/<slug>.md   (personal-vault note)
-
-      Add `project:` tag whenever the memory is project-scoped, regardless of
-      where the note lands. The tag value comes from `obsidian-memory projects lookup --json`
-      when registered, else the repo basename, else omit.
+2. Project-vault candidate? HAS_PROJECT=true AND cwd is a registered+enabled
+   project-vault AND match-type-folder finds a hit:
+     STATUS=$("$PLUGIN_RUN" projects lookup "$CLAUDE_PROJECT_DIR")
+     FOLDER=$("$PLUGIN_RUN" project-docs match-type-folder "$CLAUDE_PROJECT_DIR" --type "$PRIMARY")
+     → $CLAUDE_PROJECT_DIR/$FOLDER/<slug>.md   (project-vault note)
+   Otherwise:
+     → $OBSIDIAN_VAULT_PATH/$PERSONAL/<slug>.md (personal-vault note)
 ```
+
+Add `project:` tag whenever the memory is project-scoped, regardless of where it lands. The tag value comes from `"$PLUGIN_RUN" projects lookup --json` when registered, else the repo basename, else omit.
 
 The project-vault path is `$CLAUDE_PROJECT_DIR` (or `git -C $CLAUDE_PROJECT_DIR rev-parse --show-toplevel` if cwd is a subdir of the repo).
 

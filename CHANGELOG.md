@@ -1,5 +1,20 @@
 # Changelog
 
+## v2.2.0 — User-configurable memory types + audit YAML hardening
+
+### User-configurable memory types (closes #26 and #27)
+
+- **`~/.config/obsidian-memory/types.yaml`** is now the runtime source of truth for the memory-type vocabulary — type names, descriptions, personal-vault folder routing, and project-vault folder candidates. Seeded from `examples/types.yaml.example` on first `setup`; editing the file fully overrides the embedded default. Falls back to the embedded copy when the user file is absent.
+- **One source of truth.** Replaces three hardcoded constants (`VALID_TYPES` in `frontmatter.rs`, `TYPE_ORDER` in `overview.rs`, `type_folder_patterns` in `project_docs.rs`) and the parallel hardcoded routing pseudocode in `save-memory/SKILL.md` and the `session_end.rs` review prompt — both now look up `personal_folder` / `project_folders` from `types list --json` so user-added types route correctly. New `src/vault/types.rs` module loads the YAML once and exposes a typed lookup API.
+- **`obsidian-memory types {list,validate,path,add,remove,edit,reset}`** — new CLI surface. `add`/`remove`/`edit` mutate the user file with atomic writes; `remove` refuses to drop system-managed types and refuses (without `--force`) when existing vault notes still use the type. `reset --yes` restores the embedded default.
+- **`/obsidian-memory:types`** — slash command driving the agent through a guided Q&A flow over the same CLI verbs (no-verb form opens the picker).
+- **Parse failures are loud.** A malformed `types.yaml` panics at startup with a clear pointer at the file rather than silently falling back — falling back was the staleness vector that motivated the consolidation.
+
+### Audit YAML hardening
+
+- **Deep YAML validation in audit_corpus.** Each note's frontmatter block is now run through `serde_yaml`; failures surface as a new `FmIssue` ("malformed YAML: …"). The lenient `parse_frontmatter` in `vault::frontmatter` is too forgiving to catch the unquoted-description bug class (`description: foo: bar` parses as a nested mapping in strict YAML), so notes that crash Obsidian's renderer used to slip through audit.
+- **Auto-quote backstop in `migrate_corpus` (`--fix-frontmatter`).** After the existing timestamp housekeeping, a conservative quote-pass wraps top-level scalar values in double quotes when they contain YAML-fragile characters (`: ` / `[ ] { } , ` / leading `- ? > | & * ! %` / `#` after whitespace). Embedded `"` and `\` are escaped. Indented lines, block lists, and already-quoted values are left untouched.
+
 ## v2.1.3 — Slimmer journal entries
 
 - **`session_end.rs` review prompt** — step 4 (journal) rewritten to drop defensive scaffolding. No more `Vault writes:` / `Integrity:` cataloguing bullets, no path-citation requirement, no all-clear integrity narration. Bullets are prose covering work / decisions / corrections / unresolved threads — up to 6, fewer is fine.

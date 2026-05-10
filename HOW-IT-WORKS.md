@@ -122,7 +122,7 @@ PRIMARY ∈ {reference, findings, decision, learning}:
   otherwise             → Notes/<slug>.md       (project: tag if scoped)
 ```
 
-Folder-match for the repo-vault path: case-insensitive on basename, top-level + one level under `docs/`. `decision → decisions/|adr/|decision-records/`; `findings → findings/|research/`; `learning → learnings/|lessons/`; `reference → references/`. Project-vault writes leave the repo's working tree dirty for the user to commit; the personal vault auto-commits at SessionEnd.
+Folder-match for the repo-vault path: case-insensitive on basename, top-level + one level under `docs/`. The candidate folder names per type come from `~/.config/obsidian-memory/types.yaml` (seeded from `examples/types.yaml.example` at setup) — the shipped defaults are `decision → decisions/|adr/|decision-records/`, `findings → findings/|research/`, `learning → learnings/|lessons/`, `reference → references/`. Edit `types.yaml` (or run `/obsidian-memory:types`) to change them or add new types. Project-vault writes leave the repo's working tree dirty for the user to commit; the personal vault auto-commits at SessionEnd.
 
 ## Token telemetry (`/obsidian-memory:usage`)
 

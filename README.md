@@ -83,6 +83,7 @@ gh repo create my-obsidian-memory --private --source "$HOME/Documents/Obsidian M
 | `/obsidian-memory:usage` | Per-kind token breakdown + plugin's share of this session's tokens. |
 | `/obsidian-memory:audit` | Whole-corpus integrity: frontmatter, broken wikilinks, orphans, duplicate basenames, frontmatter backfill, description-vs-body drift. Operates on the personal vault and the current project's project-vault when registered. |
 | `/obsidian-memory:project [enable\|disable\|remove\|list]` | Manage project-vault registrations. With no verb, walks a guided picker over the registry + current cwd. See [Federated project-vaults](#federated-project-vaults). |
+| `/obsidian-memory:types [list\|add\|edit\|remove\|reset]` | Manage the memory-type vocabulary at `~/.config/obsidian-memory/types.yaml`. With no verb, walks a guided picker. See [Vault structure](#vault-structure). |
 
 ## Visibility
 
@@ -129,7 +130,7 @@ Seven types — `findings` captures multi-source research synthesis (read severa
 
 `type` lives in frontmatter; the auto-overview groups by `type:` rather than by folder, so the layout stays browsable while staying flat.
 
-Canonical type semantics live in [`templates/types.md`](./templates/types.md) — the single source of truth used by `save-memory`, the SessionEnd review, and `init_project_vault.py`.
+Canonical type semantics live in [`templates/types.md`](./templates/types.md). The runtime routing table — type names, personal-vault folder, project-vault folder candidates — is loaded from `~/.config/obsidian-memory/types.yaml` (seeded from [`examples/types.yaml.example`](./examples/types.yaml.example) on first setup). Edit that file directly, or run `/obsidian-memory:types` to add, edit, remove, or reset types interactively.
 
 If you already have your own Obsidian vault, the plugin's vault sits beside it as a separate top-level vault. Open whichever one you want in Obsidian.app — the plugin only reads/writes inside its own vault.
 
@@ -158,9 +159,10 @@ When a repo is registered + enabled:
 
 ## Configuration
 
-Two files live in `~/.config/obsidian-memory/`:
+Three files live in `~/.config/obsidian-memory/`:
 
 - `config.env` — environment variables (vault path, feature flags, log dirs). See table below.
+- `types.yaml` — memory-type vocabulary (validation, overview ordering, folder routing). Seeded from [`examples/types.yaml.example`](./examples/types.yaml.example) at setup; edit directly or via `/obsidian-memory:types`. Removing a type that existing notes use will cause audit to flag those notes — the CLI refuses such removals without `--force`.
 - `projects.json` — project-vault registry. Each opted-in project gets one entry:
 
   ```json

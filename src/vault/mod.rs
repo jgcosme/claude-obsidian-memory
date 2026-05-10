@@ -5,6 +5,7 @@ pub mod frontmatter;
 pub mod overview;
 pub mod search;
 pub mod timestamps;
+pub mod types;
 pub mod walk;
 pub mod wikilinks;
 

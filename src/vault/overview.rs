@@ -13,9 +13,12 @@ use crate::project_docs::enumerate_project_docs;
 use crate::vault::frontmatter::{note_types, read_note};
 use crate::vault::walk::collect_md_files;
 
-const TYPE_ORDER: &[&str] = &[
-    "preference", "reference", "findings", "decision", "learning", "tool", "journal",
-];
+/// Type ordering for the overview comes from the runtime type registry —
+/// declared order in `~/.config/obsidian-memory/types.yaml` (or the embedded
+/// default). User-added types appear in their declared position.
+fn type_order() -> Vec<&'static str> {
+    crate::vault::types::names()
+}
 const RECENT_JOURNAL_LIMIT: usize = 5;
 
 type Note = (PathBuf, BTreeMap<String, String>);
@@ -226,14 +229,15 @@ fn emit_by_type(items: &[Note], out: &mut Vec<String>) {
         }
     }
 
-    let mut ordered_types: Vec<String> = TYPE_ORDER
+    let order_tbl = type_order();
+    let mut ordered_types: Vec<String> = order_tbl
         .iter()
         .filter(|t| by_type.contains_key(**t))
         .map(|t| t.to_string())
         .collect();
     let mut extras: Vec<String> = order
         .into_iter()
-        .filter(|t| !TYPE_ORDER.contains(&t.as_str()) && by_type.contains_key(t))
+        .filter(|t| !order_tbl.contains(&t.as_str()) && by_type.contains_key(t))
         .collect();
     extras.sort();
     for e in extras {
@@ -290,14 +294,15 @@ pub fn overview_project(project_vault: &Path, project: Option<&str>) -> Result<S
         return Ok(out.join("\n"));
     }
 
-    let mut ordered_types: Vec<String> = TYPE_ORDER
+    let order_tbl = type_order();
+    let mut ordered_types: Vec<String> = order_tbl
         .iter()
         .filter(|t| by_type.contains_key(**t))
         .map(|t| t.to_string())
         .collect();
     let mut extras: Vec<String> = insertion_order
         .into_iter()
-        .filter(|t| !TYPE_ORDER.contains(&t.as_str()) && by_type.contains_key(t))
+        .filter(|t| !order_tbl.contains(&t.as_str()) && by_type.contains_key(t))
         .collect();
     extras.sort();
     for e in extras {

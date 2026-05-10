@@ -18,15 +18,10 @@ const SKIP_DOTFILE_DIRS: &[&str] = &[
     ".claude",
 ];
 
-/// `(decision/findings/learning/reference) → repo folder names to look for`.
-fn type_folder_patterns(t: &str) -> &'static [&'static str] {
-    match t {
-        "decision" => &["decisions", "adr", "decision-records"],
-        "findings" => &["findings", "research"],
-        "learning" => &["learnings", "lessons"],
-        "reference" => &["references"],
-        _ => &[],
-    }
+/// Repo folder names to probe for type `t`. Reads from the runtime type
+/// registry (`~/.config/obsidian-memory/types.yaml` or embedded default).
+fn type_folder_patterns(t: &str) -> Vec<String> {
+    crate::vault::types::project_folders(t).to_vec()
 }
 
 fn git_ls(repo: &Path, args: &[&str]) -> Vec<String> {
@@ -119,7 +114,7 @@ fn match_type_folder(project_path: &Path, type_: &str) -> Option<PathBuf> {
             if entry.is_dir() {
                 if let Some(name) = entry.file_name().and_then(|n| n.to_str()) {
                     let name_lower = name.to_ascii_lowercase();
-                    if patterns.contains(&name_lower.as_str()) {
+                    if patterns.iter().any(|p| p == &name_lower) {
                         return Some(entry);
                     }
                 }

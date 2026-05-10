@@ -226,17 +226,15 @@ Do steps 1-3 first. Step 4 (the journal) is written last so its bullets can refe
 
    Pick one or more types per note (never `journal` here — journal is step 4). Multi-type allowed: a note that genuinely spans axes can declare e.g. `[findings, decision]`; the first type drives routing.
 
-   Routing (PRIMARY = types[0]):
+   Routing (PRIMARY = types[0]) — fields come from `"{bin}" types list --json`:
 
-     A. PRIMARY == tool       → {vault}/Tools/<slug>.md
-     B. PRIMARY == preference → {vault}/Notes/<slug>.md  (add `project: {project_name}` only if narrowly scoped)
-     C. PRIMARY ∈ {{reference, findings, decision, learning}}:
-        1. If {project_dir} is registered + enabled in projects.json
-           (check via `"{bin}" projects lookup {project_dir}`)
-           AND has a folder matching the primary type
-           (check via `"{bin}" project-docs match-type-folder {project_dir} --type <PRIMARY>`):
-             → {project_dir}/<matched-folder>/<slug>.md  (with project: from the registry)
-        2. Otherwise → {vault}/Notes/<slug>.md  (with `project: {project_name}` if project-scoped)
+     1. CFG = the entry where .name == PRIMARY; PERSONAL = .personal_folder; HAS_PROJECT = (.project_folders|length > 0).
+     2. If HAS_PROJECT AND {project_dir} is registered + enabled
+        (`"{bin}" projects lookup {project_dir}`) AND match-type-folder hits
+        (`"{bin}" project-docs match-type-folder {project_dir} --type <PRIMARY>`):
+          → {project_dir}/<matched-folder>/<slug>.md  (with project: from the registry)
+        Otherwise:
+          → {vault}/<PERSONAL>/<slug>.md  (with `project: {project_name}` if project-scoped)
 
    Frontmatter on every new note: type, description, created_at, created_by, updated_at, updated_by (+ project when scoped). Set `created_at` and `updated_at` to the current local time in ISO 8601 with offset (e.g. `2026-05-03T22:30:00+08:00`). Set both `created_by: hook` and `updated_by: hook` (this review IS the hook). When you MODIFY an existing note in step 2, bump `updated_at` to now and set `updated_by: hook`; do NOT touch `created_at` or `created_by`. `type:` is either a single string (`type: decision`) or a YAML list (`type: [findings, decision]`).
 

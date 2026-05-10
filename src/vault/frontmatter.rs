@@ -19,12 +19,17 @@ pub static FRONTMATTER_RE: Lazy<Regex> = Lazy::new(|| {
     Regex::new(r"(?s)\A\u{feff}?---\s*\r?\n(.*?)\r?\n---\s*\r?\n").expect("frontmatter regex")
 });
 
-/// Canonical memory types. Defined here (rather than in `init_project_vault`
-/// like the Python module) so audit + project-init + frontmatter validation
-/// share one source of truth.
-pub const VALID_TYPES: &[&str] = &[
-    "preference", "reference", "findings", "decision", "learning", "tool", "journal",
-];
+/// Canonical memory type names. Loaded once from
+/// `~/.config/obsidian-memory/types.yaml` (or the embedded default if that
+/// file is absent). See `crate::vault::types` for the full schema.
+pub fn valid_types() -> Vec<&'static str> {
+    crate::vault::types::names()
+}
+
+/// `true` if `name` is a known memory type.
+pub fn is_valid_type(name: &str) -> bool {
+    crate::vault::types::is_valid(name)
+}
 
 /// Canonical actor enum for `created_by` / `updated_by`. Only the four plugin
 /// entrypoints write frontmatter — direct CLI invocations are not plugin writes

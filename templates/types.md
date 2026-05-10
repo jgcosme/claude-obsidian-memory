@@ -10,10 +10,14 @@ project: claude-obsidian-memory
 
 # Memory types
 
-Canonical definitions for the `type:` field in vault note frontmatter.
-This file is the single source of truth — `save-memory`, the SessionEnd
-review, and `init_project_vault.py` all load it. If you edit one type,
-edit it here and only here.
+Canonical **semantics** for the `type:` field. The runtime **routing
+table** (type names, validation, overview order, personal-vault folder,
+project-vault folder candidates) lives at
+`~/.config/obsidian-memory/types.yaml`, seeded from
+`examples/types.yaml.example` on first setup. Edit that file — or run
+`/obsidian-memory:types` — to add, remove, or retarget types. This
+document is the prose companion: it explains the *meaning* the prompts
+rely on. Keep the two in sync if you fork the definitions.
 
 The discriminator is **how the knowledge was produced** — that's what
 makes filtering by type useful later.
