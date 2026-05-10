@@ -1,8 +1,8 @@
 # Changelog
 
-## v2.2.0 — User-configurable memory types + audit YAML hardening
+## v2.3.0 — User-configurable memory types
 
-### User-configurable memory types (closes #26 and #27)
+Closes #26 and #27.
 
 - **`~/.config/obsidian-memory/types.yaml`** is now the runtime source of truth for the memory-type vocabulary — type names, descriptions, personal-vault folder routing, and project-vault folder candidates. Seeded from `examples/types.yaml.example` on first `setup`; editing the file fully overrides the embedded default. Falls back to the embedded copy when the user file is absent.
 - **One source of truth.** Replaces three hardcoded constants (`VALID_TYPES` in `frontmatter.rs`, `TYPE_ORDER` in `overview.rs`, `type_folder_patterns` in `project_docs.rs`) and the parallel hardcoded routing pseudocode in `save-memory/SKILL.md` and the `session_end.rs` review prompt — both now look up `personal_folder` / `project_folders` from `types list --json` so user-added types route correctly. New `src/vault/types.rs` module loads the YAML once and exposes a typed lookup API.
@@ -10,7 +10,7 @@
 - **`/obsidian-memory:types`** — slash command driving the agent through a guided Q&A flow over the same CLI verbs (no-verb form opens the picker).
 - **Parse failures are loud.** A malformed `types.yaml` panics at startup with a clear pointer at the file rather than silently falling back — falling back was the staleness vector that motivated the consolidation.
 
-### Audit YAML hardening
+## v2.2.0 — Audit YAML hardening
 
 - **Deep YAML validation in audit_corpus.** Each note's frontmatter block is now run through `serde_yaml`; failures surface as a new `FmIssue` ("malformed YAML: …"). The lenient `parse_frontmatter` in `vault::frontmatter` is too forgiving to catch the unquoted-description bug class (`description: foo: bar` parses as a nested mapping in strict YAML), so notes that crash Obsidian's renderer used to slip through audit.
 - **Auto-quote backstop in `migrate_corpus` (`--fix-frontmatter`).** After the existing timestamp housekeeping, a conservative quote-pass wraps top-level scalar values in double quotes when they contain YAML-fragile characters (`: ` / `[ ] { } , ` / leading `- ? > | & * ! %` / `#` after whitespace). Embedded `"` and `\` are escaped. Indented lines, block lists, and already-quoted values are left untouched.
